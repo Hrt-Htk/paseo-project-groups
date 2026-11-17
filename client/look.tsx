@@ -17,6 +17,7 @@ export interface Look {
   boldGroupNames: boolean;
   showProjectIcons: boolean;
   showStatusDots: boolean;
+  showFoldedStatus: boolean;
   showDiffStats: boolean;
   showPinned: boolean;
 }
@@ -53,6 +54,7 @@ export function lookFrom(values: AppearanceValues): Look {
     boldGroupNames: values.boldGroupNames,
     showProjectIcons: values.showProjectIcons,
     showStatusDots: values.showStatusDots,
+    showFoldedStatus: values.showFoldedStatus,
     showDiffStats: values.showDiffStats,
     showPinned: values.showPinned,
   };

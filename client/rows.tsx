@@ -1,3 +1,4 @@
+import type { PluginWorkspaceSnapshot, WorkspaceIndicator } from "@getpaseo/plugin";
 import {
   useWorkspace,
   useWorkspaces,
@@ -13,6 +14,7 @@ import { useDrag, useDragHandle, useDragSlot } from "./drag";
 import { DecorIcon, useDecorations } from "./decor";
 import { useT } from "./i18n";
 import { useLook, type Look } from "./look";
+import { mostUrgent } from "./model";
 import { ProjectIcon } from "./project-icon";
 import type { ProjectGroup } from "../shared/settings";
 
@@ -214,6 +216,12 @@ export function GroupHeader({
     if (controller.recentlyDropped()) return;
     decorations.open({ kind: "groups", key: group.id, name: group.name });
   }, [controller, decorations, group.id, group.name]);
+  const members = useMemo(() => new Set(group.projects), [group.projects]);
+  const status = useFoldedStatus(
+    collapsed && look.showFoldedStatus
+      ? (item) => members.has(item.project.key) && isListed(item, look)
+      : null,
+  );
 
   const toggle = useCallback(() => {
     if (controller.recentlyDropped()) return;
@@ -270,20 +278,22 @@ export function GroupHeader({
         style={styles.header}
       >
         <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
-        {decoration.icon ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("group.decorate", { name: group.name })}
-            onPress={decorate}
-          >
-            <DecorIcon
-              icon={decoration.icon}
-              fallback={null}
-              color={decoration.color ?? muted}
-              size={look.icon}
-            />
-          </Pressable>
-        ) : null}
+        <Badged status={status} theme={view.theme}>
+          {decoration.icon ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("group.decorate", { name: group.name })}
+              onPress={decorate}
+            >
+              <DecorIcon
+                icon={decoration.icon}
+                fallback={null}
+                color={decoration.color ?? muted}
+                size={look.icon}
+              />
+            </Pressable>
+          ) : null}
+        </Badged>
         <Text
           selectable={false}
           numberOfLines={1}
@@ -416,6 +426,90 @@ export function StatusDot({ color, running = false }: { color: string; running?:
   );
 }
 
+/** A workspace that appears under its project row. */
+function isListed(item: PluginWorkspaceSnapshot, look: Look): boolean {
+  // Pinned workspaces live in the Pinned section unless the user hid it.
+  return (!look.showPinned || !item.pinnedAt) && !item.background && !item.archivingAt;
+}
+
+/**
+ * Most urgent workspace status for a folded row, or "done" when `where` is null.
+ * Grouping by indicator returns only the statuses present, not every workspace.
+ */
+function useFoldedStatus(where: ((item: PluginWorkspaceSnapshot) => boolean) | null): WorkspaceIndicator {
+  const groups = useWorkspaces({ where: where ?? (() => false), groupBy: (item) => item.indicator });
+  return mostUrgent(groups.map((group) => group.key));
+}
+
+/**
+ * Paseo's folded-project badge: alert for input, spinner for running, dot otherwise.
+ * `backdrop` cuts it out of the icon it sits on.
+ */
+function StatusBadge({
+  status,
+  theme,
+  backdrop,
+}: {
+  status: WorkspaceIndicator;
+  theme: Theme;
+  backdrop: boolean;
+}) {
+  const t = useT();
+  if (status === "done") return null;
+  const color = theme.colors[INDICATOR_COLOR[status]];
+  return (
+    <View
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={t(`status.${status}`)}
+      pointerEvents="none"
+      style={{
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: backdrop ? theme.colors.surface0 : undefined,
+      }}
+    >
+      {status === "running" ? (
+        <ActivityIndicator
+          accessible={false}
+          color={color}
+          size="small"
+          style={{ transform: [{ scale: 0.5 }] }}
+        />
+      ) : status === "needs_input" ? (
+        <Icon name="CircleAlert" size={11} color={color} />
+      ) : (
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+      )}
+    </View>
+  );
+}
+
+/** Puts the status badge on the icon's lower right corner, like Paseo. Without an icon it takes the icon's place. */
+export function Badged({
+  status,
+  theme,
+  children,
+}: {
+  status: WorkspaceIndicator;
+  theme: Theme;
+  children: ReactNode;
+}) {
+  if (status === "done") return <>{children}</>;
+  if (!children) return <StatusBadge status={status} theme={theme} backdrop={false} />;
+  return (
+    <View>
+      {children}
+      <View pointerEvents="none" style={{ position: "absolute", right: -4, bottom: -4 }}>
+        <StatusBadge status={status} theme={theme} backdrop />
+      </View>
+    </View>
+  );
+}
+
 export function WorkspaceRow({
   reference,
   indent,
@@ -509,15 +603,10 @@ export function ProjectBlock({
   const styles = useRowStyles(view.theme);
   const controller = useDrag();
   const project = useProject(reference, (item) => ({ name: item.displayName }));
-  const workspaces = useWorkspaces({
-    where: (item) =>
-      item.project.key === reference.key &&
-      // Pinned workspaces live in the Pinned section unless the user hid it.
-      (!look.showPinned || !item.pinnedAt) &&
-      !item.background &&
-      !item.archivingAt,
-    orderBy: "name",
-  });
+  const listed = (item: PluginWorkspaceSnapshot) =>
+    item.project.key === reference.key && isListed(item, look);
+  const workspaces = useWorkspaces({ where: listed, orderBy: "name" });
+  const status = useFoldedStatus(collapsed && look.showFoldedStatus ? listed : null);
   const name = project?.name ?? reference.id;
   const slotRef = useDragSlot(`p:${reference.key}`, {
     kind: "project",
@@ -556,22 +645,24 @@ export function ProjectBlock({
           style={[styles.row, styles.rounded, { paddingLeft: look.projectIndent }]}
         >
           <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
-          {decoration.icon || look.showProjectIcons ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("group.decorate", { name })}
-              hitSlop={4}
-              onPress={decorate}
-              onHoverIn={hover.onHoverIn}
-            >
-              <ProjectIcon
-                reference={reference}
-                icon={decoration.icon}
-                color={decoration.color ?? muted}
-                size={look.icon}
-              />
-            </Pressable>
-          ) : null}
+          <Badged status={status} theme={view.theme}>
+            {decoration.icon || look.showProjectIcons ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("group.decorate", { name })}
+                hitSlop={4}
+                onPress={decorate}
+                onHoverIn={hover.onHoverIn}
+              >
+                <ProjectIcon
+                  reference={reference}
+                  icon={decoration.icon}
+                  color={decoration.color ?? muted}
+                  size={look.icon}
+                />
+              </Pressable>
+            ) : null}
+          </Badged>
           <Text
             selectable={false}
             numberOfLines={1}

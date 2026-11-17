@@ -20,7 +20,7 @@ import {
 } from "../shared/settings";
 import { useT } from "./i18n";
 import { DEFAULT_APPEARANCE, lookFrom } from "./look";
-import { rowStyles, StatusDot } from "./rows";
+import { Badged, rowStyles, StatusDot } from "./rows";
 
 /** Each language is named in its own language so it can be found in any locale. */
 const LANGUAGE_NAMES = { en: "English", ko: "한국어", "zh-CN": "简体中文" } as const;
@@ -33,6 +33,7 @@ function Preview({ values, theme }: { values: AppearanceValues; theme: PluginSur
   const muted = theme.colors.foregroundMuted;
   const dot = (color: string, running = false) =>
     look.showStatusDots ? <StatusDot color={color} running={running} /> : null;
+  const folded = (status: "needs_input" | "attention") => (look.showFoldedStatus ? status : "done");
   return (
     <View
       style={{
@@ -73,13 +74,18 @@ function Preview({ values, theme }: { values: AppearanceValues; theme: PluginSur
       </View>
       <View style={[styles.row, { paddingLeft: look.projectIndent }]}>
         <Icon name="ChevronRight" size={look.icon - 1} color={muted} />
-        {look.showProjectIcons ? <Icon name="Folder" size={look.icon} color={muted} /> : null}
+        <Badged status={folded("needs_input")} theme={theme}>
+          {look.showProjectIcons ? <Icon name="Folder" size={look.icon} color={muted} /> : null}
+        </Badged>
         <Text style={styles.projectName}>api-server</Text>
         <Text style={styles.detail}>3</Text>
       </View>
       <View style={{ height: look.groupGap }} />
       <View style={styles.header}>
         <Icon name="ChevronRight" size={look.icon - 1} color={muted} />
+        <Badged status={folded("attention")} theme={theme}>
+          {null}
+        </Badged>
         <Text style={styles.groupName}>{t("settings.sampleGroup2")}</Text>
         <Text style={styles.detail}>4</Text>
       </View>
@@ -196,6 +202,12 @@ export function AppearanceSettings({ theme }: PluginSurfaceProps) {
             hint={t("settings.statusDotsHint")}
             value={values.showStatusDots}
             onValueChange={(showStatusDots) => update({ showStatusDots })}
+          />
+          <SettingsSwitch
+            label={t("settings.foldedStatus")}
+            hint={t("settings.foldedStatusHint")}
+            value={values.showFoldedStatus}
+            onValueChange={(showFoldedStatus) => update({ showFoldedStatus })}
           />
           <SettingsSwitch
             label={t("settings.diffStats")}

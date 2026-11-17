@@ -184,6 +184,7 @@ test("project rows honor the icon visibility setting and keep overrides visible"
     "@getpaseo/plugin/client/ui": { Icon: "Icon" },
     "react-native": { View: "View", Text: "Text", Pressable: "Pressable" },
     "./project-icon": { ProjectIcon: "ProjectIcon" },
+    "./model": { mostUrgent: () => "done" },
     "./i18n": { useT: () => key => key },
     "./look": { useLook: () => ({ showProjectIcons, icon: 13 }) },
     "./decor": { useDecorations: () => ({ get: () => ({ icon: override, color: null }) }) },

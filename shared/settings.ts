@@ -55,6 +55,8 @@ export const appearanceDocument = defineSettings({
     boldGroupNames: z.boolean().default(true),
     showProjectIcons: z.boolean().default(true),
     showStatusDots: z.boolean().default(true),
+    /** A folded project or group shows its most urgent workspace status on its icon. */
+    showFoldedStatus: z.boolean().default(true),
     showDiffStats: z.boolean().default(true),
     showPinned: z.boolean().default(true),
     /** Plugin text language. `auto` follows the app language. */

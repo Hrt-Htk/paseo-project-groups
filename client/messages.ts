@@ -1,6 +1,12 @@
 import { defineTranslations } from "@getpaseo/plugin/client";
 
 const en = {
+  status: {
+    needs_input: "Needs input",
+    failed: "Failed",
+    running: "Working",
+    attention: "Ready to review",
+  },
   plugin: {
     viewTitle: "Project groups",
     viewDescription: "Group projects and drag to reorder groups and projects.",
@@ -161,6 +167,8 @@ const en = {
     statusDots: "Workspace status dots",
     statusDotsHint:
       "A spinner means running, green means a result to review, yellow means waiting for input, red means failed.",
+    foldedStatus: "Status on folded rows",
+    foldedStatusHint: "A folded project or group shows its most urgent workspace status on its icon.",
     diffStats: "Changed lines (+/−)",
     pinnedSection: "Pinned section",
     pinnedSectionHint: "When off, pinned workspaces appear under their own projects.",
@@ -171,6 +179,12 @@ const en = {
 };
 
 const ko = {
+  status: {
+    needs_input: "입력 필요",
+    failed: "실패",
+    running: "실행 중",
+    attention: "검토 대기",
+  },
   plugin: {
     viewTitle: "프로젝트 그룹",
     viewDescription: "프로젝트를 그룹으로 묶고, 끌어서 그룹과 순서를 바꿉니다.",
@@ -319,6 +333,8 @@ const ko = {
     projectIcons: "프로젝트 폴더 아이콘",
     statusDots: "워크스페이스 상태 점",
     statusDotsHint: "도는 표시는 실행 중, 초록 점은 확인할 결과, 노란 점은 입력 대기, 빨간 점은 실패입니다.",
+    foldedStatus: "접힌 행의 상태",
+    foldedStatusHint: "접힌 프로젝트나 그룹의 아이콘에 가장 급한 워크스페이스 상태를 표시합니다.",
     diffStats: "변경 줄 수 (+/−)",
     pinnedSection: "‘고정됨’ 구역",
     pinnedSectionHint: "끄면 고정한 워크스페이스가 자기 프로젝트 아래에 나옵니다.",
@@ -329,6 +345,12 @@ const ko = {
 };
 
 const zhCN = {
+  status: {
+    needs_input: "需要输入",
+    failed: "失败",
+    running: "运行中",
+    attention: "待查看",
+  },
   plugin: {
     viewTitle: "项目分组",
     viewDescription: "分组管理项目，拖动调整顺序。",
@@ -481,6 +503,8 @@ const zhCN = {
     projectIcons: "项目图标",
     statusDots: "工作区状态点",
     statusDotsHint: "旋转图标：运行中；绿：待查看；黄：待输入；红：失败。",
+    foldedStatus: "折叠行的状态",
+    foldedStatusHint: "折叠的项目或分组在图标上显示最紧急的工作区状态。",
     diffStats: "变更行数（+/−）",
     pinnedSection: "置顶区域",
     pinnedSectionHint: "关闭后，置顶工作区显示在所属项目下。",

@@ -44,7 +44,7 @@ function loadClient(file, host = {}) {
       useToast: () => ({ show: noop, error: noop }),
     },
     "./i18n": { useT: () => (key) => key },
-    "./model": {},
+    "./model": { mostUrgent: () => "done" },
     "./project-icon": { ProjectIcon: "ProjectIcon" },
     "./look": { useLook: () => ({ icon: 13, text: 12, line: 16, small: 11 }) },
     "./drag": {
@@ -170,7 +170,7 @@ test("workspace cancel does not save the draft", async (t) => {
 });
 
 test("group rename preserves composition and saves the latest text on blur", async (t) => {
-  const { GroupHeader } = loadClient("rows.tsx");
+  const { GroupHeader } = loadClient("rows.tsx", { useWorkspaces: () => [] });
   const renamed = [];
   const props = {
     group: { id: "group", name: "Original", projects: [] },
@@ -205,7 +205,7 @@ test("group rename preserves composition and saves the latest text on blur", asy
 });
 
 test("group rename starts with the current name and Return saves the new draft", async (t) => {
-  const { GroupHeader } = loadClient("rows.tsx");
+  const { GroupHeader } = loadClient("rows.tsx", { useWorkspaces: () => [] });
   let props;
   let renderer;
   const renamed = [];
