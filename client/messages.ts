@@ -333,7 +333,7 @@ const ko = {
     projectIcons: "프로젝트 폴더 아이콘",
     statusDots: "워크스페이스 상태 점",
     statusDotsHint: "도는 표시는 실행 중, 초록 점은 확인할 결과, 노란 점은 입력 대기, 빨간 점은 실패입니다.",
-    foldedStatus: "접힌 행의 상태",
+    foldedStatus: "접힌 줄에 상태 표시",
     foldedStatusHint: "접힌 프로젝트나 그룹의 아이콘에 가장 급한 워크스페이스 상태를 표시합니다.",
     diffStats: "변경 줄 수 (+/−)",
     pinnedSection: "‘고정됨’ 구역",

@@ -294,6 +294,7 @@ function GroupsList(view: PluginSidebarViewProps) {
     const grouped = new Set(groups.flatMap((group) => group.projects));
     return projects.filter((project) => !grouped.has(project.key));
   }, [groups, projects]);
+  const ungroupedKeys = useMemo(() => ungrouped.map((project) => project.key), [ungrouped]);
 
   const saveGroups = useCallback(
     async (next: ProjectGroup[]) => {
@@ -605,6 +606,7 @@ function GroupsList(view: PluginSidebarViewProps) {
 
               {groups.length || pinned.length ? <View style={{ height: look.groupGap }} /> : null}
               <UngroupedHeader
+                projects={ungroupedKeys}
                 count={ungrouped.length}
                 collapsed={collapsed.has(UNGROUPED_KEY)}
                 view={view}

@@ -74,7 +74,7 @@ function Preview({ values, theme }: { values: AppearanceValues; theme: PluginSur
       </View>
       <View style={[styles.row, { paddingLeft: look.projectIndent }]}>
         <Icon name="ChevronRight" size={look.icon - 1} color={muted} />
-        <Badged status={folded("needs_input")} theme={theme}>
+        <Badged status={folded("needs_input")} theme={theme} reserve={look.showFoldedStatus}>
           {look.showProjectIcons ? <Icon name="Folder" size={look.icon} color={muted} /> : null}
         </Badged>
         <Text style={styles.projectName}>api-server</Text>
@@ -83,7 +83,7 @@ function Preview({ values, theme }: { values: AppearanceValues; theme: PluginSur
       <View style={{ height: look.groupGap }} />
       <View style={styles.header}>
         <Icon name="ChevronRight" size={look.icon - 1} color={muted} />
-        <Badged status={folded("attention")} theme={theme}>
+        <Badged status={folded("attention")} theme={theme} reserve={look.showFoldedStatus}>
           {null}
         </Badged>
         <Text style={styles.groupName}>{t("settings.sampleGroup2")}</Text>

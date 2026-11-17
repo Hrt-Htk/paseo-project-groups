@@ -278,7 +278,7 @@ export function GroupHeader({
         style={styles.header}
       >
         <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
-        <Badged status={status} theme={view.theme}>
+        <Badged status={status} theme={view.theme} reserve={look.showFoldedStatus}>
           {decoration.icon ? (
             <Pressable
               accessibilityRole="button"
@@ -342,11 +342,14 @@ export function GroupHeader({
 }
 
 export function UngroupedHeader({
+  projects,
   count,
   collapsed,
   view,
   onToggle,
 }: {
+  /** Ref keys of the projects in no group. */
+  projects: readonly string[];
   count: number;
   collapsed: boolean;
   view: PluginSidebarViewProps;
@@ -362,6 +365,12 @@ export function UngroupedHeader({
     if (controller.recentlyDropped()) return;
     onToggle();
   }, [controller, onToggle]);
+  const members = useMemo(() => new Set(projects), [projects]);
+  const status = useFoldedStatus(
+    collapsed && look.showFoldedStatus
+      ? (item) => members.has(item.project.key) && isListed(item, look)
+      : null,
+  );
   return (
     <View ref={slotRef}>
       <Pressable
@@ -373,6 +382,9 @@ export function UngroupedHeader({
         style={styles.header}
       >
         <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
+        <Badged status={status} theme={view.theme} reserve={look.showFoldedStatus}>
+          {null}
+        </Badged>
         <Text selectable={false} numberOfLines={1} style={styles.mutedHeading}>
           {t("sidebar.ungrouped")}
         </Text>
@@ -488,18 +500,29 @@ function StatusBadge({
   );
 }
 
-/** Puts the status badge on the icon's lower right corner, like Paseo. Without an icon it takes the icon's place. */
+/**
+ * Puts the status badge on the icon's lower right corner, like Paseo. Without an icon the badge
+ * takes the icon's place, in a slot kept while `reserve` is on so the name never shifts.
+ */
 export function Badged({
   status,
   theme,
+  reserve,
   children,
 }: {
   status: WorkspaceIndicator;
   theme: Theme;
+  reserve: boolean;
   children: ReactNode;
 }) {
+  if (!children) {
+    return reserve ? (
+      <View style={{ width: 12, height: 12 }}>
+        <StatusBadge status={status} theme={theme} backdrop={false} />
+      </View>
+    ) : null;
+  }
   if (status === "done") return <>{children}</>;
-  if (!children) return <StatusBadge status={status} theme={theme} backdrop={false} />;
   return (
     <View>
       {children}
@@ -645,7 +668,7 @@ export function ProjectBlock({
           style={[styles.row, styles.rounded, { paddingLeft: look.projectIndent }]}
         >
           <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
-          <Badged status={status} theme={view.theme}>
+          <Badged status={status} theme={view.theme} reserve={look.showFoldedStatus}>
             {decoration.icon || look.showProjectIcons ? (
               <Pressable
                 accessibilityRole="button"
