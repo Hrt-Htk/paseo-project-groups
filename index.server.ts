@@ -1,7 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { removeProject } from "./server/remove-project";
+import { projectIds, removeProject } from "./server/remove-project";
 import { createProjectIconReader } from "./server/project-icon";
-import { projectIconRpc, removeProjectRpc } from "./shared/rpc";
+import { projectIconRpc, projectIdsRpc, removeProjectRpc } from "./shared/rpc";
 import { decorationsDocument, groupsDocument } from "./shared/settings";
 
 export default function contribute(server: PluginServerContext) {
@@ -9,6 +9,7 @@ export default function contribute(server: PluginServerContext) {
   server.registerSettings(groupsDocument);
   server.registerSettings(decorationsDocument);
   server.handle(removeProjectRpc, removeProject);
+  server.handle(projectIdsRpc, projectIds);
   const icons = createProjectIconReader();
   server.handle(projectIconRpc, icons.read);
   return () => icons.close();

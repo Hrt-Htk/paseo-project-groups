@@ -10,7 +10,7 @@ import {
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/ui";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, Pressable, Text, View, type ScrollView as NativeScrollView } from "react-native";
-import { removeProjectRpc } from "../shared/rpc";
+import { projectIdsRpc, removeProjectRpc } from "../shared/rpc";
 import {
   appearanceDocument,
   decorationsDocument,
@@ -40,15 +40,17 @@ import { ProjectIcon } from "./project-icon";
 import {
   addGroup,
   canNest,
-  forgetProject,
+  dropProjects,
   groupOfProject,
   moveGroup,
   nestProject,
   nextGroupName,
   placeProject,
+  parseProjectKey,
   removeGroup,
   renameGroup,
-  subProjects,
+  sectionOf,
+  sidebarLayout,
   type DragSubject,
   type DropTarget,
   type Parents,
@@ -70,6 +72,9 @@ const UNGROUPED_KEY = "u";
 const EMPTY_GROUPS: readonly ProjectGroup[] = [];
 const EMPTY_KEYS: readonly string[] = [];
 const EMPTY_PARENTS: Parents = {};
+/** Startup and reconnects settle before a missing parent is checked with the daemon. */
+const PARENT_CHECK_DELAY_MS = 3000;
+const PARENT_CHECK_RETRY_MS = 30_000;
 const EMPTY_DECORATIONS: DecorationsValues = { groups: {}, projects: {}, workspaces: {} };
 
 type Theme = PluginSidebarViewProps["theme"];
@@ -261,6 +266,7 @@ function GroupsList(view: PluginSidebarViewProps) {
   const layoutState = useSettings(layoutDocument);
   const decorationsState = useSettings(decorationsDocument);
   const removeProjectCall = useRpc(removeProjectRpc);
+  const projectIdsCall = useRpc(projectIdsRpc);
   const toast = useToast();
   const t = useT();
   const look = useLook();
@@ -312,24 +318,20 @@ function GroupsList(view: PluginSidebarViewProps) {
     orderBy: "pinnedAt",
   });
   const byKey = useMemo(() => new Map(projects.map((project) => [project.key, project])), [projects]);
-  const tree = useMemo(
-    () => subProjects(projects.map((project) => project.key), parents),
-    [parents, projects],
+  const order = useMemo(() => projects.map((project) => project.key), [projects]);
+  const layout = useMemo(() => sidebarLayout(groups, parents, order), [groups, order, parents]);
+  const refsOf = useCallback(
+    (keys: readonly string[]) =>
+      keys.map((key) => byKey.get(key)).filter((item): item is ProjectRef => item !== undefined),
+    [byKey],
   );
-  const nestedKeys = useMemo(() => new Set([...tree.values()].flat()), [tree]);
   /** The keys plus their sub-projects, for the status of a folded section. */
   const withSubProjects = useCallback(
-    (keys: readonly string[]) => keys.flatMap((key) => [key, ...(tree.get(key) ?? [])]),
-    [tree],
+    (keys: readonly string[]) => keys.flatMap((key) => [key, ...(layout.children.get(key) ?? [])]),
+    [layout],
   );
-  const ungrouped = useMemo(() => {
-    const grouped = new Set(groups.flatMap((group) => group.projects));
-    return projects.filter((project) => !grouped.has(project.key) && !nestedKeys.has(project.key));
-  }, [groups, nestedKeys, projects]);
-  const ungroupedKeys = useMemo(
-    () => withSubProjects(ungrouped.map((project) => project.key)),
-    [ungrouped, withSubProjects],
-  );
+  const ungrouped = useMemo(() => refsOf(layout.ungrouped), [layout, refsOf]);
+  const ungroupedKeys = useMemo(() => withSubProjects(layout.ungrouped), [layout, withSubProjects]);
 
   const savePlacement = useCallback(
     async (next: Placement) => {
@@ -554,6 +556,43 @@ function GroupsList(view: PluginSidebarViewProps) {
     [groups, parents, reveal, savePlacement],
   );
 
+  // A parent missing from the list may still be loading or on a reconnecting host. Only the
+  // daemon's own answer that it has no such project counts as a removal; any failure keeps the
+  // links and tries again later.
+  const latest = useRef({ groups, parents, order, savePlacement });
+  latest.current = { groups, parents, order, savePlacement };
+  const missingParents = layout.missingParents.join("\n");
+  const [parentCheck, setParentCheck] = useState(0);
+  useEffect(() => {
+    if (!missingParents || groupsState.status !== "ready") return;
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      projectIdsCall({}).then(
+        (daemon) => {
+          if (cancelled) return;
+          const listed = new Set(daemon.projectIds);
+          const gone = missingParents.split("\n").filter((key) => {
+            const parsed = parseProjectKey(key);
+            return parsed !== null && parsed.hostId === daemon.serverId && !listed.has(parsed.projectId);
+          });
+          if (!gone.length) return;
+          const { groups, parents, order, savePlacement } = latest.current;
+          const next = dropProjects(groups, parents, gone, order);
+          if (next) void savePlacement(next);
+        },
+        () => {
+          if (!cancelled) retry = setTimeout(() => setParentCheck((count) => count + 1), PARENT_CHECK_RETRY_MS);
+        },
+      );
+    }, PARENT_CHECK_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      clearTimeout(retry);
+    };
+  }, [groupsState.status, missingParents, parentCheck, projectIdsCall]);
+
   const confirmRemoveProject = useCallback(
     async (reference: ProjectRef, workspaceKeys: readonly string[]) => {
       setRemoving(true);
@@ -565,13 +604,10 @@ function GroupsList(view: PluginSidebarViewProps) {
             ? t("project.removedWithWorkspaces", { count: result.removedWorkspaceIds.length })
             : t("project.removed"),
         );
-        // Drop the removed project from its group, its sub-project links and its look so no stale
-        // key stays behind.
-        const next = placeProject(groups, parents, reference.key, { kind: "ungroup" });
-        const nextParents = forgetProject(next?.parents ?? parents, reference.key);
-        if (next || nextParents) {
-          void savePlacement({ groups: next?.groups ?? [...groups], parents: nextParents ?? { ...parents } });
-        }
+        // Drop the removed project and its look so no stale key stays behind. Its sub-projects
+        // take its place.
+        const next = dropProjects(groups, parents, [reference.key], order);
+        if (next) void savePlacement(next);
         const cleaned = withoutDecorations([
           ["projects", [reference.key]],
           ["workspaces", workspaceKeys],
@@ -583,7 +619,7 @@ function GroupsList(view: PluginSidebarViewProps) {
         setRemoving(false);
       }
     },
-    [groups, parents, removeProjectCall, saveDecorations, savePlacement, t, toast, withoutDecorations],
+    [groups, order, parents, removeProjectCall, saveDecorations, savePlacement, t, toast, withoutDecorations],
   );
 
   if (groupsState.status === "loading" || layoutState.status === "loading") {
@@ -617,16 +653,10 @@ function GroupsList(view: PluginSidebarViewProps) {
    */
   const parentChoices = (reference: ProjectRef): ProjectRef[] => {
     const parent = parents[reference.key];
-    const home = parent !== undefined && nestedKeys.has(reference.key) ? parent : reference.key;
-    const groupId = groupOfProject(groups, home);
-    const section =
-      groupId === null
-        ? ungrouped
-        : (groups.find((group) => group.id === groupId)?.projects ?? [])
-            .filter((key) => !nestedKeys.has(key))
-            .map((key) => byKey.get(key))
-            .filter((item): item is ProjectRef => item !== undefined);
-    return section.filter(
+    const section = sectionOf(layout, reference.key);
+    if (section === undefined) return [];
+    const keys = section === null ? layout.ungrouped : (layout.groups.get(section) ?? []);
+    return refsOf(keys).filter(
       (item) => item.key === parent || canNest(parents, reference.key, item.key),
     );
   };
@@ -641,9 +671,7 @@ function GroupsList(view: PluginSidebarViewProps) {
   const projectBlock = (reference: ProjectRef, groupId: string | null, nested = false): ReactNode => {
     const children = nested
       ? []
-      : (tree.get(reference.key) ?? [])
-          .map((key) => byKey.get(key))
-          .filter((child): child is ProjectRef => child !== undefined);
+      : refsOf(layout.children.get(reference.key) ?? []);
     return (
       <ProjectBlock
         key={reference.key}
@@ -699,10 +727,7 @@ function GroupsList(view: PluginSidebarViewProps) {
               ) : null}
 
               {groups.map((group, index) => {
-                const members = group.projects
-                  .filter((key) => !nestedKeys.has(key))
-                  .map((key) => byKey.get(key))
-                  .filter((reference): reference is ProjectRef => reference !== undefined);
+                const members = refsOf(layout.groups.get(group.id) ?? []);
                 const folded = collapsed.has(`g:${group.id}`);
                 return (
                   <Fragment key={group.id}>

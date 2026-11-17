@@ -191,9 +191,116 @@ export function placeProject(
   return { groups: nextGroups ?? [...groups], parents: nextParents };
 }
 
-/** Drops every link to or from a removed project. Its sub-projects fall back to Ungrouped. */
-export function forgetProject(parents: Parents, key: string): Record<string, string> | null {
-  const entries = Object.entries(parents).filter(([child, parent]) => child !== key && parent !== key);
-  return entries.length === Object.keys(parents).length ? null : Object.fromEntries(entries);
+/** Where every shown project goes. Keys are project ref keys. */
+export interface SidebarLayout {
+  /** Top-level projects of each group, by group id, in order. */
+  groups: Map<string, string[]>;
+  /** Top-level projects in no group, in `order`. */
+  ungrouped: string[];
+  /** Parent key -> sub-project keys, see `subProjects`. */
+  children: Map<string, string[]>;
+  /** Parents that are linked to but not shown: still loading, on a disconnected host, or gone. */
+  missingParents: string[];
 }
 
+/**
+ * Builds the sidebar from the saved placement and the projects shown (`order`). A sub-project
+ * whose parent is missing shows at the top level right where the parent's group entry is (or in
+ * Ungrouped), and keeps its link, so it returns under the parent when the parent loads.
+ */
+export function sidebarLayout(
+  groups: readonly ProjectGroup[],
+  parents: Parents,
+  order: readonly string[],
+): SidebarLayout {
+  const shown = new Set(order);
+  const children = subProjects(order, parents);
+  const nested = new Set([...children.values()].flat());
+  const waiting = new Map<string, string[]>();
+  for (const key of order) {
+    const parent = parents[key];
+    if (parent === undefined || nested.has(key)) continue;
+    const list = waiting.get(parent);
+    if (list) list.push(key);
+    else waiting.set(parent, [key]);
+  }
+  const placed = new Set<string>();
+  const place = (list: string[], key: string) => {
+    if (placed.has(key)) return;
+    placed.add(key);
+    list.push(key);
+  };
+  const layoutGroups = new Map<string, string[]>();
+  for (const group of groups) {
+    const list: string[] = [];
+    for (const key of group.projects) {
+      if (shown.has(key) && !nested.has(key)) place(list, key);
+      for (const orphan of waiting.get(key) ?? []) place(list, orphan);
+    }
+    layoutGroups.set(group.id, list);
+  }
+  const ungrouped: string[] = [];
+  for (const key of order) if (!nested.has(key)) place(ungrouped, key);
+  return {
+    groups: layoutGroups,
+    ungrouped,
+    children,
+    missingParents: [...waiting.keys()].filter((key) => !shown.has(key)),
+  };
+}
+
+/** The section a project shows in: a group id, null for Ungrouped, undefined when not shown. */
+export function sectionOf(layout: SidebarLayout, key: string): string | null | undefined {
+  for (const [parent, children] of layout.children) {
+    if (children.includes(key)) return sectionOf(layout, parent);
+  }
+  for (const [id, keys] of layout.groups) if (keys.includes(key)) return id;
+  return layout.ungrouped.includes(key) ? null : undefined;
+}
+
+/**
+ * Removes projects that no longer exist. Each one's sub-projects take its place in its group, in
+ * `order` (Ungrouped when it was in no group), and every link to or from it is deleted. Only call
+ * this for a confirmed removal: a project that is merely not loaded yet must keep its links.
+ */
+export function dropProjects(
+  groups: readonly ProjectGroup[],
+  parents: Parents,
+  removed: readonly string[],
+  order: readonly string[],
+): Placement | null {
+  const gone = new Set(removed);
+  const rank = (key: string) => {
+    const index = order.indexOf(key);
+    return index < 0 ? order.length : index;
+  };
+  const childrenOf = (key: string) =>
+    Object.keys(parents)
+      .filter((child) => parents[child] === key && !gone.has(child))
+      .sort((a, b) => rank(a) - rank(b));
+  const nextGroups = groups.map((group) => ({
+    ...group,
+    projects: group.projects.flatMap((key) => (gone.has(key) ? childrenOf(key) : [key])),
+  }));
+  const nextParents = Object.fromEntries(
+    Object.entries(parents).filter(([child, parent]) => !gone.has(child) && !gone.has(parent)),
+  );
+  const changed =
+    Object.keys(nextParents).length !== Object.keys(parents).length ||
+    nextGroups.some((group, index) => group.projects.length !== groups[index]!.projects.length ||
+      group.projects.some((key, position) => key !== groups[index]!.projects[position]));
+  return changed ? { groups: nextGroups, parents: nextParents } : null;
+}
+
+/** Splits a project ref key (`["<hostId>","<projectId>"]`). Null when it has another shape. */
+export function parseProjectKey(key: string): { hostId: string; projectId: string } | null {
+  try {
+    const value: unknown = JSON.parse(key);
+    if (Array.isArray(value) && value.length === 2 && value.every((part) => typeof part === "string")) {
+      return { hostId: value[0] as string, projectId: value[1] as string };
+    }
+  } catch {
+    // Not a ref key.
+  }
+  return null;
+}

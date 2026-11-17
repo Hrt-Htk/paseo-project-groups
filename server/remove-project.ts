@@ -4,7 +4,7 @@ import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
-import type { removeProjectRpc } from "../shared/rpc";
+import type { projectIdsRpc, removeProjectRpc } from "../shared/rpc";
 
 const CLI_TIMEOUT_MS = 60_000;
 
@@ -46,6 +46,21 @@ function run(cli: string, args: string[]): Promise<string> {
       },
     );
   });
+}
+
+export async function projectIds(): Promise<RpcOutput<typeof projectIdsRpc>> {
+  const cli = await findCli();
+  const [status, listed] = await Promise.all([
+    run(cli, ["daemon", "status", "--json"]).then((out) => JSON.parse(out) as { serverId?: unknown }),
+    run(cli, ["project", "ls", "--json"]).then((out) => JSON.parse(out) as { projectId?: unknown }[]),
+  ]);
+  if (typeof status.serverId !== "string" || !Array.isArray(listed)) {
+    throw new Error("Unexpected output from the paseo command.");
+  }
+  return {
+    serverId: status.serverId,
+    projectIds: listed.flatMap((project) => (typeof project.projectId === "string" ? [project.projectId] : [])),
+  };
 }
 
 export async function removeProject({

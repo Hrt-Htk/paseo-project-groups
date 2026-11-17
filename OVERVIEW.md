@@ -22,6 +22,16 @@ Click **New group** at the top of the sidebar and type a name. Then drag project
 
 Folding a project or group hides its workspaces but not their status. The folded row shows the most urgent one on its icon: needs input, failed, running, or ready to review. Ungrouped does the same.
 
+## Sub-projects
+
+A project can sit under another project, for example a folder of plugins under the project that holds them. Open the ⋯ menu on the project and pick a parent under **Put under project**. It lists the other projects of the same group, or of Ungrouped.
+
+- A sub-project shows under its parent, one step in, after the parent's workspaces.
+- Folding the parent hides its sub-projects, and the folded icon includes their status.
+- Only one level: a project that has sub-projects can't go under another one.
+- To take it out, pick **Back to top level** in the same menu. It lands right after its parent. Moving it to a group, or dragging it to one, works too.
+- If the parent is removed, its sub-projects take its place in its group.
+
 The ⋯ button on a project moves it to another group, starts a new workspace, copies its path or removes it. The ⋯ button on a workspace renames, pins, copies the path or branch, or archives it.
 
 ## Colors and icons

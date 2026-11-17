@@ -11,6 +11,16 @@ export const removeProjectRpc = defineRpc({
   output: z.object({ removedWorkspaceIds: z.array(z.string()) }),
 });
 
+/**
+ * The daemon's own server id and project ids, read through the CLI on the daemon host. Unlike the
+ * client's project list, this answer is never partial: it fails instead.
+ */
+export const projectIdsRpc = defineRpc({
+  name: "project.ids",
+  input: z.object({}),
+  output: z.object({ serverId: z.string(), projectIds: z.array(z.string()) }),
+});
+
 /** Paseo's uploaded or discovered icon. SVGs use the host renderer on native clients too. */
 export const projectIconSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("image"), uri: z.string() }),

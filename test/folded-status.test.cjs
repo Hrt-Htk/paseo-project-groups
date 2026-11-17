@@ -303,9 +303,71 @@ test("placeProject pulls a sub-project out to a group or Ungrouped", () => {
   assert.deepEqual(plain(after), { groups: [{ id: "g", name: "G", projects: ["a", "b", "c"] }], parents: {} });
 });
 
-test("forgetProject drops links to and from a removed project", () => {
-  assert.deepEqual(plain(model.forgetProject({ b: "a", c: "a", d: "e" }, "a")), { d: "e" });
-  assert.deepEqual(plain(model.forgetProject({ b: "a" }, "b")), {});
-  assert.equal(model.forgetProject({ b: "a" }, "z"), null);
+const layoutOf = (groups, parents, order) => {
+  const layout = model.sidebarLayout(groups, parents, order);
+  return plain({
+    groups: Object.fromEntries(layout.groups),
+    ungrouped: layout.ungrouped,
+    children: Object.fromEntries(layout.children),
+    missingParents: layout.missingParents,
+  });
+};
+
+test("a sub-project shows under its parent and nowhere else", () => {
+  const groups = [{ id: "g", name: "G", projects: ["a", "c"] }];
+  assert.deepEqual(layoutOf(groups, { b: "a" }, ["a", "b", "c", "d"]), {
+    groups: { g: ["a", "c"] },
+    ungrouped: ["d"],
+    children: { a: ["b"] },
+    missingParents: [],
+  });
+});
+
+test("while the parent is missing, the sub-project shows where the parent was and keeps its link", () => {
+  const groups = [{ id: "g", name: "G", projects: ["a", "c"] }];
+  // "a" is still loading: its sub-project stands in its place in the group, not in Ungrouped.
+  assert.deepEqual(layoutOf(groups, { b: "a" }, ["b", "c"]), {
+    groups: { g: ["b", "c"] },
+    ungrouped: [],
+    children: {},
+    missingParents: ["a"],
+  });
+  // "a" loads again: "b" is back under it, nothing was saved in between.
+  assert.deepEqual(layoutOf(groups, { b: "a" }, ["a", "b", "c"]).children, { a: ["b"] });
+  // A missing parent that was in no group leaves its sub-project in Ungrouped.
+  assert.deepEqual(layoutOf([], { b: "a" }, ["b"]).ungrouped, ["b"]);
+});
+
+test("saving a group change while a parent is missing keeps the link and the parent's place", () => {
+  const groups = [{ id: "g", name: "G", projects: ["a", "c"] }];
+  const moved = model.placeProject(groups, { b: "a" }, "c", { kind: "project-before", groupId: "g", projectKey: "a" });
+  assert.deepEqual(plain(moved), { groups: [{ id: "g", name: "G", projects: ["c", "a"] }], parents: { b: "a" } });
+});
+
+test("removing a parent puts its sub-projects in its place and deletes the links", () => {
+  const groups = [{ id: "g", name: "G", projects: ["x", "a", "y"] }];
+  const order = ["a", "b", "c", "x", "y"];
+  assert.deepEqual(plain(model.dropProjects(groups, { c: "a", b: "a", z: "q" }, ["a"], order)), {
+    groups: [{ id: "g", name: "G", projects: ["x", "b", "c", "y"] }],
+    parents: { z: "q" },
+  });
+  // A parent in no group: its sub-projects go to Ungrouped.
+  assert.deepEqual(plain(model.dropProjects([], { b: "a" }, ["a"], order)), { groups: [], parents: {} });
+  // Removing a sub-project only drops its own link.
+  assert.deepEqual(plain(model.dropProjects(groups, { b: "a" }, ["b"], order)), { groups, parents: {} });
+  assert.equal(model.dropProjects(groups, { b: "a" }, ["nothing"], order), null);
+});
+
+test("project keys split into host and project ids", () => {
+  assert.deepEqual(plain(model.parseProjectKey('["srv_1","prj_2"]')), { hostId: "srv_1", projectId: "prj_2" });
+  assert.equal(model.parseProjectKey("prj_2"), null);
+  assert.equal(model.parseProjectKey('["srv_1"]'), null);
+});
+
+test("sectionOf finds a sub-project's section through its parent", () => {
+  const layout = model.sidebarLayout([{ id: "g", name: "G", projects: ["a"] }], { b: "a" }, ["a", "b", "d"]);
+  assert.equal(model.sectionOf(layout, "b"), "g");
+  assert.equal(model.sectionOf(layout, "d"), null);
+  assert.equal(model.sectionOf(layout, "zzz"), undefined);
 });
 
