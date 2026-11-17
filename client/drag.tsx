@@ -35,6 +35,14 @@ const MEASURE_TIMEOUT_MS = 150;
 
 const WEB = Platform.OS === "web";
 
+/** The part of the browser window the drag reads. The plugin builds without DOM types. */
+interface PointerTarget {
+  window?: {
+    addEventListener(type: "pointerdown", listener: (event: { pointerType: string }) => void, capture: boolean): void;
+    removeEventListener(type: "pointerdown", listener: (event: { pointerType: string }) => void, capture: boolean): void;
+  };
+}
+
 export interface DragController {
   register(id: string, slot: Slot, node: View | null): void;
   /** A press began on a draggable row. The drag starts only if the pointer then moves. */
@@ -100,6 +108,10 @@ export function useDragController(
     let speed = 0;
     let timer: ReturnType<typeof setInterval> | null = null;
     let session = 0;
+    /** Web: pointer type of the latest press. Phone browsers report "touch". */
+    let lastPointerType = "mouse";
+    /** The current press uses mouse rules: movement starts the drag, no long press. */
+    let mousePress = false;
 
     const toContent = (next: Hit | null): Hit | null => {
       if (!next) return null;
@@ -225,9 +237,10 @@ export function useDragController(
       press(next) {
         pressed = next;
         touchArmed = false;
+        mousePress = WEB && lastPointerType === "mouse";
       },
       armTouch() {
-        if (!pressed) return;
+        if (!pressed || mousePress) return;
         touchArmed = true;
         setScrollLocked(true);
       },
@@ -265,7 +278,7 @@ export function useDragController(
       },
       onMoveShouldSetPanResponderCapture: (_event, gesture) => {
         if (!pressed) return false;
-        if (WEB) return Math.abs(gesture.dx) > MOUSE_SLOP || Math.abs(gesture.dy) > MOUSE_SLOP;
+        if (mousePress) return Math.abs(gesture.dx) > MOUSE_SLOP || Math.abs(gesture.dy) > MOUSE_SLOP;
         return touchArmed;
       },
       onPanResponderGrant: (_event, gesture) => {
@@ -278,10 +291,28 @@ export function useDragController(
       onShouldBlockNativeResponder: () => true,
     });
 
-    return { controller, surfaceHandlers: surface.panHandlers, cancel: () => end(false) };
+    const notePointer = (type: string) => {
+      lastPointerType = type;
+    };
+
+    return {
+      controller,
+      surfaceHandlers: surface.panHandlers,
+      cancel: () => end(false),
+      notePointer,
+    };
   }, [ghostY, scroll, viewport]);
 
-  useEffect(() => engine.cancel, [engine]);
+  useEffect(() => {
+    // pointerdown fires before the touch or mouse events the responder system reads.
+    const target = WEB ? (globalThis as unknown as PointerTarget).window : undefined;
+    const onPointerDown = (event: { pointerType: string }) => engine.notePointer(event.pointerType);
+    target?.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      target?.removeEventListener("pointerdown", onPointerDown, true);
+      engine.cancel();
+    };
+  }, [engine]);
 
   return {
     controller: engine.controller,
@@ -310,8 +341,8 @@ export function useDragSlot(id: string, slot: Slot): (node: View | null) => void
 export interface DragHandle {
   /** Spread on the View around the draggable row. Records the press without taking it. */
   pressCapture: { onStartShouldSetResponderCapture: () => boolean };
-  /** Pass to the row's Pressable. Undefined on web, where mouse movement starts the drag. */
-  onLongPress: (() => void) | undefined;
+  /** Pass to the row's Pressable. Arms touch presses; a mouse press ignores it. */
+  onLongPress: () => void;
   onPressOut: () => void;
 }
 
@@ -336,5 +367,5 @@ export function useDragHandle(subject: DragSubject): DragHandle {
   const onLongPress = useCallback(() => controller.armTouch(), [controller]);
   const onPressOut = useCallback(() => controller.release(), [controller]);
 
-  return { pressCapture, onLongPress: WEB ? undefined : onLongPress, onPressOut };
+  return { pressCapture, onLongPress, onPressOut };
 }
