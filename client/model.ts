@@ -124,3 +124,76 @@ export function nextGroupName(groups: readonly ProjectGroup[], format: (number: 
     if (!names.has(name)) return name;
   }
 }
+
+/** Sub-project ref key -> parent project ref key, as stored in the groups document. */
+export type Parents = Readonly<Record<string, string>>;
+
+export interface Placement {
+  groups: ProjectGroup[];
+  parents: Record<string, string>;
+}
+
+/**
+ * Parent key -> its sub-project keys, in `order`. Only one level counts: a link whose parent is
+ * gone, or is itself a sub-project, is ignored and that project shows at the top level again.
+ */
+export function subProjects(order: readonly string[], parents: Parents): Map<string, string[]> {
+  const present = new Set(order);
+  const nestedLink = (key: string) => {
+    const parent = parents[key];
+    return parent !== undefined && parent !== key && present.has(parent);
+  };
+  const tree = new Map<string, string[]>();
+  for (const key of order) {
+    const parent = parents[key];
+    if (!nestedLink(key) || nestedLink(parent!)) continue;
+    const children = tree.get(parent!);
+    if (children) children.push(key);
+    else tree.set(parent!, [key]);
+  }
+  return tree;
+}
+
+/** Can `key` go under `parent`? Keeps nesting one level deep. */
+export function canNest(parents: Parents, key: string, parent: string): boolean {
+  if (key === parent || parent in parents) return false;
+  return !Object.values(parents).includes(key);
+}
+
+/** Puts `key` under `parent` and out of its group. Null when it is already there or not allowed. */
+export function nestProject(
+  groups: readonly ProjectGroup[],
+  parents: Parents,
+  key: string,
+  parent: string,
+): Placement | null {
+  if (parents[key] === parent || !canNest(parents, key, parent)) return null;
+  return {
+    groups: groups.map((group) =>
+      group.projects.includes(key) ? { ...group, projects: group.projects.filter((item) => item !== key) } : group,
+    ),
+    parents: { ...parents, [key]: parent },
+  };
+}
+
+/** Moves a project to a group or Ungrouped, taking it out from under its parent. Null when nothing changes. */
+export function placeProject(
+  groups: readonly ProjectGroup[],
+  parents: Parents,
+  key: string,
+  target: DropTarget,
+): Placement | null {
+  const nextGroups = moveProject(groups, key, target);
+  const nested = key in parents;
+  if (!nextGroups && !nested) return null;
+  const nextParents = { ...parents };
+  delete nextParents[key];
+  return { groups: nextGroups ?? [...groups], parents: nextParents };
+}
+
+/** Drops every link to or from a removed project. Its sub-projects fall back to Ungrouped. */
+export function forgetProject(parents: Parents, key: string): Record<string, string> | null {
+  const entries = Object.entries(parents).filter(([child, parent]) => child !== key && parent !== key);
+  return entries.length === Object.keys(parents).length ? null : Object.fromEntries(entries);
+}
+

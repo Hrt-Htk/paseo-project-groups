@@ -11,7 +11,7 @@ import { Icon, Modal, TextInput, copyText, useToast } from "@getpaseo/plugin/cli
 import { useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useT } from "./i18n";
-import { groupOfProject } from "./model";
+import { groupOfProject, type Parents } from "./model";
 import type { ProjectGroup } from "../shared/settings";
 
 type Theme = PluginSidebarViewProps["theme"];
@@ -145,11 +145,87 @@ function Buttons({ children }: { children: ReactNode }) {
 
 const closeOnDismiss = (onClose: () => void) => (open: boolean) => (open ? undefined : onClose());
 
+function ProjectChoice({
+  reference,
+  checked,
+  theme,
+  onChoose,
+}: {
+  reference: ProjectRef;
+  checked: boolean;
+  theme: Theme;
+  onChoose: (key: string) => void;
+}) {
+  const name = useProject(reference, (item) => item.displayName) ?? reference.id;
+  return (
+    <MenuRow
+      label={name}
+      icon="CornerDownRight"
+      checked={checked}
+      theme={theme}
+      onPress={() => onChoose(reference.key)}
+    />
+  );
+}
+
+function MenuHint({ text, theme }: { text: string; theme: Theme }) {
+  return (
+    <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, paddingHorizontal: 10 }}>{text}</Text>
+  );
+}
+
+/** Projects this one can go under: the other top-level projects of its own section, in sidebar order. */
+function ParentSection({
+  reference,
+  candidates,
+  parents,
+  theme,
+  onChoose,
+  onUnnest,
+}: {
+  reference: ProjectRef;
+  candidates: readonly ProjectRef[];
+  parents: Parents;
+  theme: Theme;
+  onChoose: (key: string) => void;
+  onUnnest: () => void;
+}) {
+  const t = useT();
+  const current = parents[reference.key] ?? null;
+  const hasSubProjects = Object.values(parents).includes(reference.key);
+  return (
+    <MenuSection title={t("project.parentSection")} theme={theme}>
+      {hasSubProjects ? (
+        <MenuHint text={t("project.parentHasSubProjects")} theme={theme} />
+      ) : candidates.length === 0 ? (
+        <MenuHint text={t("project.parentNone")} theme={theme} />
+      ) : (
+        candidates.map((item) => (
+          <ProjectChoice
+            key={item.key}
+            reference={item}
+            checked={item.key === current}
+            theme={theme}
+            onChoose={onChoose}
+          />
+        ))
+      )}
+      {current !== null ? (
+        <MenuRow label={t("project.unnest")} icon="CornerLeftUp" theme={theme} onPress={onUnnest} />
+      ) : null}
+    </MenuSection>
+  );
+}
+
 export function ProjectMenuDialog({
   reference,
   groups,
+  parents,
+  parentChoices,
   theme,
   onChooseGroup,
+  onChooseParent,
+  onUnnest,
   onNewWorkspace,
   onDecorate,
   onRemove,
@@ -157,8 +233,13 @@ export function ProjectMenuDialog({
 }: {
   reference: ProjectRef;
   groups: readonly ProjectGroup[];
+  parents: Parents;
+  /** Projects it can go under, see ParentSection. */
+  parentChoices: readonly ProjectRef[];
   theme: Theme;
   onChooseGroup: (groupId: string | null) => void;
+  onChooseParent: (parentKey: string) => void;
+  onUnnest: () => void;
   onNewWorkspace: () => void;
   onDecorate: (name: string) => void;
   onRemove: () => void;
@@ -168,7 +249,8 @@ export function ProjectMenuDialog({
   const toast = useToast();
   const project = useProject(reference, (item) => ({ name: item.displayName, path: item.rootPath }));
   const name = project?.name ?? reference.id;
-  const current = groupOfProject(groups, reference.key);
+  // A sub-project is in no group, but it is not in Ungrouped either.
+  const current = reference.key in parents ? undefined : groupOfProject(groups, reference.key);
   const copyPath = () => {
     if (!project) return;
     onClose();
@@ -199,6 +281,14 @@ export function ProjectMenuDialog({
             onPress={() => onChooseGroup(null)}
           />
         </MenuSection>
+        <ParentSection
+          reference={reference}
+          candidates={parentChoices}
+          parents={parents}
+          theme={theme}
+          onChoose={onChooseParent}
+          onUnnest={onUnnest}
+        />
         <MenuSection title={t("project.actionsSection")} theme={theme}>
           <MenuRow label={t("project.newWorkspaceItem")} icon="Plus" theme={theme} onPress={onNewWorkspace} />
           <MenuRow

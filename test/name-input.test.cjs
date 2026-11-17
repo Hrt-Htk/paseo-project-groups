@@ -20,7 +20,7 @@ const theme = {
     surface2: "#dddddd",
   },
 };
-const view = { theme, layout: { compact: true } };
+const view = { theme, layout: { compact: true }, active: { workspace: null } };
 const noop = () => {};
 const Modal = ({ children }) => React.createElement("Modal", null, children);
 Modal.Content = ({ children }) => React.createElement("ModalContent", null, children);
@@ -193,6 +193,7 @@ test("group rename preserves composition and saves the latest text on blur", asy
   const renamed = [];
   const props = {
     group: { id: "group", name: "Original", projects: [] },
+    statusKeys: [],
     count: 0,
     collapsed: false,
     renaming: true,
@@ -230,6 +231,7 @@ test("group rename starts with the current name and Return saves the new draft",
   const renamed = [];
   props = {
     group: { id: "group", name: "Original", projects: [] },
+    statusKeys: [],
     count: 0,
     collapsed: false,
     renaming: false,

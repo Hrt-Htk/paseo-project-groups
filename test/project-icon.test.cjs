@@ -190,7 +190,7 @@ test("project rows honor the icon visibility setting and keep overrides visible"
     "./decor": { useDecorations: () => ({ get: () => ({ icon: override, color: null }) }) },
     "./drag": { useDrag: () => ({ recentlyDropped: () => false }), useDragSlot: () => null, useDragHandle: () => ({}) },
   });
-  const props = { reference: { key: "host:one", id: "one", hostId: "host" }, collapsed: true, view: { theme: { colors: {} }, layout: { compact: true }, navigation: {} } };
+  const props = { reference: { key: "host:one", id: "one", hostId: "host" }, nested: false, subProjects: [], collapsed: true, view: { theme: { colors: {} }, layout: { compact: true }, active: { workspace: null }, navigation: {} } };
   let renderer;
   await act(() => { renderer = create(React.createElement(ProjectBlock, props)); });
   t.after(async () => act(() => renderer.unmount()));

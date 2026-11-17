@@ -191,6 +191,7 @@ function useHover(layout: PluginSidebarViewProps["layout"]) {
 
 export function GroupHeader({
   group,
+  statusKeys,
   count,
   collapsed,
   renaming,
@@ -203,6 +204,8 @@ export function GroupHeader({
   onDelete,
 }: {
   group: ProjectGroup;
+  /** Ref keys of the group's projects and their sub-projects. */
+  statusKeys: readonly string[];
   count: number;
   collapsed: boolean;
   renaming: boolean;
@@ -230,12 +233,10 @@ export function GroupHeader({
     if (controller.recentlyDropped()) return;
     decorations.open({ kind: "groups", key: group.id, name: group.name });
   }, [controller, decorations, group.id, group.name]);
-  const members = useMemo(() => new Set(group.projects), [group.projects]);
-  const status = useFoldedStatus(
-    collapsed && look.showFoldedStatus
-      ? (item) => members.has(item.project.key) && isListed(item, look)
-      : null,
-  );
+  const members = useMemo(() => new Set(statusKeys), [statusKeys]);
+  const inside = (item: PluginWorkspaceSnapshot) => members.has(item.project.key) && isListed(item, look);
+  const status = useFoldedStatus(collapsed && look.showFoldedStatus ? inside : null);
+  const holdsActive = useHoldsActive(view, collapsed ? inside : null);
 
   const toggle = useCallback(() => {
     if (controller.recentlyDropped()) return;
@@ -291,6 +292,7 @@ export function GroupHeader({
         onHoverOut={hover.onHoverOut}
         style={styles.header}
       >
+        {holdsActive ? <ActiveFill theme={view.theme} inset={4} /> : null}
         <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
         <Badged status={status} theme={view.theme} reserve={look.showFoldedStatus}>
           {decoration.icon ? (
@@ -362,7 +364,7 @@ export function UngroupedHeader({
   view,
   onToggle,
 }: {
-  /** Ref keys of the projects in no group. */
+  /** Ref keys of the projects in no group and their sub-projects. */
   projects: readonly string[];
   count: number;
   collapsed: boolean;
@@ -380,11 +382,9 @@ export function UngroupedHeader({
     onToggle();
   }, [controller, onToggle]);
   const members = useMemo(() => new Set(projects), [projects]);
-  const status = useFoldedStatus(
-    collapsed && look.showFoldedStatus
-      ? (item) => members.has(item.project.key) && isListed(item, look)
-      : null,
-  );
+  const inside = (item: PluginWorkspaceSnapshot) => members.has(item.project.key) && isListed(item, look);
+  const status = useFoldedStatus(collapsed && look.showFoldedStatus ? inside : null);
+  const holdsActive = useHoldsActive(view, collapsed ? inside : null);
   return (
     <View ref={slotRef}>
       <Pressable
@@ -395,6 +395,7 @@ export function UngroupedHeader({
         onPress={toggle}
         style={styles.header}
       >
+        {holdsActive ? <ActiveFill theme={view.theme} inset={4} /> : null}
         <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
         <Badged status={status} theme={view.theme} reserve={look.showFoldedStatus}>
           {null}
@@ -465,6 +466,38 @@ function isListed(item: PluginWorkspaceSnapshot, look: Look): boolean {
 function useFoldedStatus(where: ((item: PluginWorkspaceSnapshot) => boolean) | null): WorkspaceIndicator {
   const groups = useWorkspaces({ where: where ?? (() => false), groupBy: (item) => item.indicator });
   return mostUrgent(groups.map((group) => group.key));
+}
+
+/** True when the open workspace matches `where`, so a folded row can show it is inside. */
+function useHoldsActive(
+  view: PluginSidebarViewProps,
+  where: ((item: PluginWorkspaceSnapshot) => boolean) | null,
+): boolean {
+  const key = view.active.workspace?.key;
+  const hits = useWorkspaces({ where: (item) => !!where && item.ref.key === key && where(item) });
+  return hits.length > 0;
+}
+
+/**
+ * A half-strength selected fill behind a folded row that hides the open workspace. `inset` matches
+ * the selected workspace row's side margin on rows that have none of their own.
+ */
+function ActiveFill({ theme, inset }: { theme: Theme; inset: number }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: inset,
+        right: inset,
+        borderRadius: 6,
+        backgroundColor: theme.colors.border,
+        opacity: 0.5,
+      }}
+    />
+  );
 }
 
 /**
@@ -620,21 +653,30 @@ export function WorkspaceRow({
 export function ProjectBlock({
   reference,
   groupId,
+  nested,
+  subProjects,
   collapsed,
   dragging,
   view,
   onToggle,
   onMenu,
   onWorkspaceMenu,
+  children,
 }: {
   reference: ProjectRef;
   groupId: string | null;
+  /** Shown under its parent project, one indent step in. */
+  nested: boolean;
+  /** Ref keys of the projects shown under this one; folding rolls their status up. */
+  subProjects: readonly string[];
   collapsed: boolean;
   dragging: boolean;
   view: PluginSidebarViewProps;
   onToggle: (key: string) => void;
   onMenu: (reference: ProjectRef) => void;
   onWorkspaceMenu: (reference: WorkspaceRef) => void;
+  /** Sub-project blocks, hidden while folded. */
+  children?: ReactNode;
 }) {
   const look = useLook();
   const styles = useRowStyles(view.theme);
@@ -643,7 +685,12 @@ export function ProjectBlock({
   const listed = (item: PluginWorkspaceSnapshot) =>
     item.project.key === reference.key && isListed(item, look);
   const workspaces = useWorkspaces({ where: listed, orderBy: "name" });
-  const status = useFoldedStatus(collapsed && look.showFoldedStatus ? listed : null);
+  const rolledUp = (item: PluginWorkspaceSnapshot) =>
+    (item.project.key === reference.key || subProjects.includes(item.project.key)) && isListed(item, look);
+  const status = useFoldedStatus(collapsed && look.showFoldedStatus ? rolledUp : null);
+  const holdsActive = useHoldsActive(view, collapsed ? rolledUp : null);
+  // A sub-project sits where its parent's workspaces start.
+  const shift = nested ? look.workspaceIndent - look.projectIndent : 0;
   const name = project?.name ?? reference.id;
   const slotRef = useDragSlot(`p:${reference.key}`, {
     kind: "project",
@@ -668,7 +715,9 @@ export function ProjectBlock({
 
   if (!project) return null;
   return (
-    <View ref={slotRef} style={dragging ? { opacity: 0.4 } : undefined}>
+    // A sub-project is no drop slot of its own: its parent's slot spans it, so a drop next to it
+    // lands next to the parent.
+    <View ref={nested ? undefined : slotRef} style={dragging ? { opacity: 0.4 } : undefined}>
       <View {...handle.pressCapture}>
         <Pressable
           accessibilityRole="button"
@@ -679,8 +728,9 @@ export function ProjectBlock({
           onPressOut={handle.onPressOut}
           onHoverIn={hover.onHoverIn}
           onHoverOut={hover.onHoverOut}
-          style={[styles.row, styles.rounded, { paddingLeft: look.projectIndent }]}
+          style={[styles.row, styles.rounded, { paddingLeft: look.projectIndent + shift }]}
         >
+          {holdsActive ? <ActiveFill theme={view.theme} inset={0} /> : null}
           <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={look.icon - 1} color={muted} />
           <Badged status={status} theme={view.theme} reserve={look.showFoldedStatus}>
             {decoration.icon || look.showProjectIcons ? (
@@ -712,9 +762,9 @@ export function ProjectBlock({
             slots={2}
             iconSize={look.icon}
             detail={
-              collapsed && workspaces.length ? (
+              collapsed && workspaces.length + subProjects.length ? (
                 <Text selectable={false} style={styles.detail}>
-                  {workspaces.length}
+                  {workspaces.length + subProjects.length}
                 </Text>
               ) : null
             }
@@ -744,11 +794,12 @@ export function ProjectBlock({
             <WorkspaceRow
               key={workspace.key}
               reference={workspace}
-              indent={look.workspaceIndent}
+              indent={look.workspaceIndent + shift}
               view={view}
               onMenu={onWorkspaceMenu}
             />
           ))}
+      {collapsed ? null : children}
     </View>
   );
 }

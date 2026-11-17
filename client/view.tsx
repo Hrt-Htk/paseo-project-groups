@@ -8,7 +8,7 @@ import {
   type WorkspaceRef,
 } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/ui";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, Pressable, Text, View, type ScrollView as NativeScrollView } from "react-native";
 import { removeProjectRpc } from "../shared/rpc";
 import {
@@ -39,14 +39,20 @@ import { DEFAULT_APPEARANCE, LookContext, lookFrom, useLook, useViewActions } fr
 import { ProjectIcon } from "./project-icon";
 import {
   addGroup,
+  canNest,
+  forgetProject,
   groupOfProject,
   moveGroup,
-  moveProject,
+  nestProject,
   nextGroupName,
+  placeProject,
   removeGroup,
   renameGroup,
+  subProjects,
   type DragSubject,
   type DropTarget,
+  type Parents,
+  type Placement,
 } from "./model";
 import {
   EmptyGroupRow,
@@ -63,6 +69,7 @@ import { useSettingsSaver } from "./save";
 const UNGROUPED_KEY = "u";
 const EMPTY_GROUPS: readonly ProjectGroup[] = [];
 const EMPTY_KEYS: readonly string[] = [];
+const EMPTY_PARENTS: Parents = {};
 const EMPTY_DECORATIONS: DecorationsValues = { groups: {}, projects: {}, workspaces: {} };
 
 type Theme = PluginSidebarViewProps["theme"];
@@ -266,12 +273,12 @@ function GroupsList(view: PluginSidebarViewProps) {
   // Optimistic copies make drops and folding feel instant. They clear when a new revision
   // arrives with no save left in flight, or when a save fails. Clearing between two queued
   // saves would briefly show the first save without the second.
-  const [pendingGroups, setPendingGroups] = useState<ProjectGroup[] | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<Placement | null>(null);
   const [pendingCollapsed, setPendingCollapsed] = useState<string[] | null>(null);
   const groupsRevision = groupsState.status === "ready" ? groupsState.revision : null;
   const layoutRevision = layoutState.status === "ready" ? layoutState.revision : null;
   useEffect(() => {
-    if (!groupsSaver.busy()) setPendingGroups(null);
+    if (!groupsSaver.busy()) setPendingPlacement(null);
   }, [groupsRevision, groupsSaver]);
   useEffect(() => {
     if (!layoutSaver.busy()) setPendingCollapsed(null);
@@ -285,7 +292,9 @@ function GroupsList(view: PluginSidebarViewProps) {
     pendingDecorations ?? (decorationsState.status === "ready" ? decorationsState.values : EMPTY_DECORATIONS);
 
   const groups: readonly ProjectGroup[] =
-    pendingGroups ?? (groupsState.status === "ready" ? groupsState.values.groups : EMPTY_GROUPS);
+    pendingPlacement?.groups ?? (groupsState.status === "ready" ? groupsState.values.groups : EMPTY_GROUPS);
+  const parents: Parents =
+    pendingPlacement?.parents ?? (groupsState.status === "ready" ? groupsState.values.parents : EMPTY_PARENTS);
   const collapsedList: readonly string[] =
     pendingCollapsed ?? (layoutState.status === "ready" ? layoutState.values.collapsed : EMPTY_KEYS);
   const collapsed = useMemo(() => new Set(collapsedList), [collapsedList]);
@@ -303,23 +312,40 @@ function GroupsList(view: PluginSidebarViewProps) {
     orderBy: "pinnedAt",
   });
   const byKey = useMemo(() => new Map(projects.map((project) => [project.key, project])), [projects]);
+  const tree = useMemo(
+    () => subProjects(projects.map((project) => project.key), parents),
+    [parents, projects],
+  );
+  const nestedKeys = useMemo(() => new Set([...tree.values()].flat()), [tree]);
+  /** The keys plus their sub-projects, for the status of a folded section. */
+  const withSubProjects = useCallback(
+    (keys: readonly string[]) => keys.flatMap((key) => [key, ...(tree.get(key) ?? [])]),
+    [tree],
+  );
   const ungrouped = useMemo(() => {
     const grouped = new Set(groups.flatMap((group) => group.projects));
-    return projects.filter((project) => !grouped.has(project.key));
-  }, [groups, projects]);
-  const ungroupedKeys = useMemo(() => ungrouped.map((project) => project.key), [ungrouped]);
+    return projects.filter((project) => !grouped.has(project.key) && !nestedKeys.has(project.key));
+  }, [groups, nestedKeys, projects]);
+  const ungroupedKeys = useMemo(
+    () => withSubProjects(ungrouped.map((project) => project.key)),
+    [ungrouped, withSubProjects],
+  );
 
-  const saveGroups = useCallback(
-    async (next: ProjectGroup[]) => {
+  const savePlacement = useCallback(
+    async (next: Placement) => {
       if (groupsState.status !== "ready") return;
-      setPendingGroups(next);
-      const saved = await groupsSaver.save({ groups: next });
+      setPendingPlacement(next);
+      const saved = await groupsSaver.save(next);
       if (!saved) {
-        setPendingGroups(null);
+        setPendingPlacement(null);
         toast.error(t("toast.groupsSaveFailed"));
       }
     },
     [groupsSaver, groupsState.status, t, toast],
+  );
+  const saveGroups = useCallback(
+    (next: ProjectGroup[]) => savePlacement({ groups: next, parents: { ...parents } }),
+    [parents, savePlacement],
   );
 
   const saveDecorations = useCallback(
@@ -399,17 +425,30 @@ function GroupsList(view: PluginSidebarViewProps) {
   const toggleProject = useCallback((key: string) => toggle(`p:${key}`), [toggle]);
   const toggleUngrouped = useCallback(() => toggle(UNGROUPED_KEY), [toggle]);
 
+  /** Unfolds sections so a project the user just moved is visible where it landed. */
+  const reveal = useCallback(
+    (keys: readonly string[]) => {
+      if (layoutState.status !== "ready" || !keys.some((key) => collapsed.has(key))) return;
+      const next = collapsedList.filter((item) => !keys.includes(item));
+      setPendingCollapsed(next);
+      void layoutSaver.save({ collapsed: next }).then((saved) => {
+        if (!saved) setPendingCollapsed(null);
+      });
+    },
+    [collapsed, collapsedList, layoutSaver, layoutState.status],
+  );
+
   const onDrop = useCallback(
     (subject: DragSubject, target: DropTarget) => {
-      const next =
-        subject.kind === "project"
-          ? moveProject(groups, subject.key, target)
-          : target.kind === "group-at"
-            ? moveGroup(groups, subject.id, target.index)
-            : null;
+      if (subject.kind === "project") {
+        const next = placeProject(groups, parents, subject.key, target);
+        if (next) void savePlacement(next);
+        return;
+      }
+      const next = target.kind === "group-at" ? moveGroup(groups, subject.id, target.index) : null;
       if (next) void saveGroups(next);
     },
-    [groups, saveGroups],
+    [groups, parents, saveGroups, savePlacement],
   );
 
   const viewportRef = useRef<View>(null);
@@ -469,15 +508,50 @@ function GroupsList(view: PluginSidebarViewProps) {
     (reference: ProjectRef, groupId: string | null) => {
       setDialog(null);
       // Picking the group the project is already in must not move it to the end.
-      if (groupOfProject(groups, reference.key) === groupId) return;
-      const next = moveProject(
+      if (!(reference.key in parents) && groupOfProject(groups, reference.key) === groupId) return;
+      const next = placeProject(
         groups,
+        parents,
         reference.key,
         groupId === null ? { kind: "ungroup" } : { kind: "into-group", groupId },
       );
-      if (next) void saveGroups(next);
+      if (!next) return;
+      void savePlacement(next);
+      reveal([groupId === null ? UNGROUPED_KEY : `g:${groupId}`]);
     },
-    [groups, saveGroups],
+    [groups, parents, reveal, savePlacement],
+  );
+
+  const chooseParent = useCallback(
+    (reference: ProjectRef, parentKey: string) => {
+      setDialog(null);
+      const next = nestProject(groups, parents, reference.key, parentKey);
+      if (!next) return;
+      void savePlacement(next);
+      const parentGroup = groupOfProject(groups, parentKey);
+      reveal([`p:${parentKey}`, parentGroup === null ? UNGROUPED_KEY : `g:${parentGroup}`]);
+    },
+    [groups, parents, reveal, savePlacement],
+  );
+
+  /** Back to the top level, right after its parent so it stays where the user was looking. */
+  const unnest = useCallback(
+    (reference: ProjectRef) => {
+      setDialog(null);
+      const parent = parents[reference.key];
+      if (parent === undefined) return;
+      const groupId = groupOfProject(groups, parent);
+      const next = placeProject(
+        groups,
+        parents,
+        reference.key,
+        groupId === null ? { kind: "ungroup" } : { kind: "project-after", groupId, projectKey: parent },
+      );
+      if (!next) return;
+      void savePlacement(next);
+      reveal([groupId === null ? UNGROUPED_KEY : `g:${groupId}`]);
+    },
+    [groups, parents, reveal, savePlacement],
   );
 
   const confirmRemoveProject = useCallback(
@@ -491,9 +565,13 @@ function GroupsList(view: PluginSidebarViewProps) {
             ? t("project.removedWithWorkspaces", { count: result.removedWorkspaceIds.length })
             : t("project.removed"),
         );
-        // Drop the removed project from its group and its look so no stale key stays behind.
-        const next = moveProject(groups, reference.key, { kind: "ungroup" });
-        if (next) void saveGroups(next);
+        // Drop the removed project from its group, its sub-project links and its look so no stale
+        // key stays behind.
+        const next = placeProject(groups, parents, reference.key, { kind: "ungroup" });
+        const nextParents = forgetProject(next?.parents ?? parents, reference.key);
+        if (next || nextParents) {
+          void savePlacement({ groups: next?.groups ?? [...groups], parents: nextParents ?? { ...parents } });
+        }
         const cleaned = withoutDecorations([
           ["projects", [reference.key]],
           ["workspaces", workspaceKeys],
@@ -505,7 +583,7 @@ function GroupsList(view: PluginSidebarViewProps) {
         setRemoving(false);
       }
     },
-    [groups, removeProjectCall, saveDecorations, saveGroups, t, toast, withoutDecorations],
+    [groups, parents, removeProjectCall, saveDecorations, savePlacement, t, toast, withoutDecorations],
   );
 
   if (groupsState.status === "loading" || layoutState.status === "loading") {
@@ -533,6 +611,26 @@ function GroupsList(view: PluginSidebarViewProps) {
     );
   }
 
+  /**
+   * Projects `reference` can go under: the other top-level projects of the section it shows in (its
+   * parent's section for a sub-project), in sidebar order.
+   */
+  const parentChoices = (reference: ProjectRef): ProjectRef[] => {
+    const parent = parents[reference.key];
+    const home = parent !== undefined && nestedKeys.has(reference.key) ? parent : reference.key;
+    const groupId = groupOfProject(groups, home);
+    const section =
+      groupId === null
+        ? ungrouped
+        : (groups.find((group) => group.id === groupId)?.projects ?? [])
+            .filter((key) => !nestedKeys.has(key))
+            .map((key) => byKey.get(key))
+            .filter((item): item is ProjectRef => item !== undefined);
+    return section.filter(
+      (item) => item.key === parent || canNest(parents, reference.key, item.key),
+    );
+  };
+
   const draggingKey =
     drag.subject?.kind === "project"
       ? drag.subject.key
@@ -540,19 +638,30 @@ function GroupsList(view: PluginSidebarViewProps) {
         ? drag.subject.id
         : null;
 
-  const projectBlock = (reference: ProjectRef, groupId: string | null) => (
-    <ProjectBlock
-      key={reference.key}
-      reference={reference}
-      groupId={groupId}
-      collapsed={collapsed.has(`p:${reference.key}`)}
-      dragging={draggingKey === reference.key}
-      view={view}
-      onToggle={toggleProject}
-      onMenu={openProjectMenu}
-      onWorkspaceMenu={openWorkspaceMenu}
-    />
-  );
+  const projectBlock = (reference: ProjectRef, groupId: string | null, nested = false): ReactNode => {
+    const children = nested
+      ? []
+      : (tree.get(reference.key) ?? [])
+          .map((key) => byKey.get(key))
+          .filter((child): child is ProjectRef => child !== undefined);
+    return (
+      <ProjectBlock
+        key={reference.key}
+        reference={reference}
+        groupId={groupId}
+        nested={nested}
+        subProjects={children.map((child) => child.key)}
+        collapsed={collapsed.has(`p:${reference.key}`)}
+        dragging={draggingKey === reference.key}
+        view={view}
+        onToggle={toggleProject}
+        onMenu={openProjectMenu}
+        onWorkspaceMenu={openWorkspaceMenu}
+      >
+        {children.map((child) => projectBlock(child, groupId, true))}
+      </ProjectBlock>
+    );
+  };
 
   return (
     <DecorationsContext.Provider value={decorations}>
@@ -591,6 +700,7 @@ function GroupsList(view: PluginSidebarViewProps) {
 
               {groups.map((group, index) => {
                 const members = group.projects
+                  .filter((key) => !nestedKeys.has(key))
                   .map((key) => byKey.get(key))
                   .filter((reference): reference is ProjectRef => reference !== undefined);
                 const folded = collapsed.has(`g:${group.id}`);
@@ -599,6 +709,7 @@ function GroupsList(view: PluginSidebarViewProps) {
                     {index > 0 || pinned.length ? <View style={{ height: look.groupGap }} /> : null}
                     <GroupHeader
                       group={group}
+                      statusKeys={withSubProjects(members.map((reference) => reference.key))}
                       count={members.length}
                       collapsed={folded}
                       renaming={renamingId === group.id}
@@ -648,8 +759,12 @@ function GroupsList(view: PluginSidebarViewProps) {
           <ProjectMenuDialog
             reference={dialog.reference}
             groups={groups}
+            parents={parents}
+            parentChoices={parentChoices(dialog.reference)}
             theme={view.theme}
             onChooseGroup={(groupId) => chooseGroup(dialog.reference, groupId)}
+            onChooseParent={(parentKey) => chooseParent(dialog.reference, parentKey)}
+            onUnnest={() => unnest(dialog.reference)}
             onNewWorkspace={() => {
               setDialog(null);
               view.navigation.openProject(dialog.reference);

@@ -11,7 +11,7 @@ export const groupSchema = z.object({
 export type ProjectGroup = z.infer<typeof groupSchema>;
 
 /**
- * Groups and their project membership. Host scope so every client of this daemon
+ * Groups, their project membership and sub-projects. Host scope so every client of this daemon
  * sees the same grouping.
  */
 export const groupsDocument = defineSettings({
@@ -20,6 +20,8 @@ export const groupsDocument = defineSettings({
   version: 1,
   schema: z.object({
     groups: z.array(groupSchema).default([]),
+    /** Sub-project ref key -> parent project ref key. A sub-project is in no group. One level deep. */
+    parents: z.record(z.string(), z.string()).default({}),
   }),
 });
 
