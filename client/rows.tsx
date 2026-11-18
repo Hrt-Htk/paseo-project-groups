@@ -53,14 +53,15 @@ export function rowStyles(theme: Theme, look: Look) {
       lineHeight: look.smallLine,
       fontWeight: "600" as const,
     },
+    // Project and workspace names follow the app's own sidebar rows.
     projectName: {
       flex: 1,
-      color: theme.colors.foreground,
+      color: theme.colors.foregroundMuted,
       fontSize: look.text,
       lineHeight: look.line,
-      fontWeight: "500" as const,
+      fontWeight: "400" as const,
     },
-    workspaceName: { flex: 1, color: theme.colors.foreground, fontSize: look.text, lineHeight: look.line },
+    workspaceName: { flex: 1, color: theme.colors.foreground, fontSize: look.text, lineHeight: look.line, opacity: 0.76 },
     detail: { color: theme.colors.foregroundMuted, fontSize: look.small, lineHeight: look.smallLine },
     hint: {
       color: theme.colors.foregroundMuted,
@@ -186,7 +187,7 @@ function useHover(layout: PluginSidebarViewProps["layout"]) {
   const [hovered, setHovered] = useState(false);
   const onHoverIn = useCallback(() => setHovered(true), []);
   const onHoverOut = useCallback(() => setHovered(false), []);
-  return { show: alwaysShow || hovered, onHoverIn, onHoverOut };
+  return { show: alwaysShow || hovered, hovered, onHoverIn, onHoverOut };
 }
 
 export function GroupHeader({
@@ -660,7 +661,11 @@ export function WorkspaceRow({
       <Text
         selectable={false}
         numberOfLines={1}
-        style={[styles.workspaceName, nameColor ? { color: nameColor } : null]}
+        style={[
+          styles.workspaceName,
+          nameColor ? { color: nameColor } : null,
+          active || hover.hovered ? { opacity: 1 } : null,
+        ]}
       >
         {workspace.title}
       </Text>
