@@ -4,6 +4,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Decoration, DecorationKind, DecorationsValues } from "../shared/settings";
 import { useT } from "./i18n";
+import { searchIcons } from "./lucide-names";
 import { firstGraphemes } from "./text";
 
 type Theme = PluginSidebarViewProps["theme"];
@@ -23,7 +24,7 @@ export const PALETTE = [
   { color: "#8B8D98", name: "gray" },
 ] as const;
 
-/** Lucide names offered in the picker. Any emoji works through the text field as well. */
+/** Lucide names offered in the picker. Search reaches the rest; any emoji works as well. */
 export const ICONS: readonly string[] = [
   "Folder",
   "FolderGit2",
@@ -233,9 +234,15 @@ export function DecorateDialog({
     setEmojiSeed("");
     setEmojiField((field) => field + 1);
   };
+  // Uncontrolled like the emoji field; the state only mirrors what was typed.
+  const [query, setQuery] = useState("");
   const withIcon = target.kind !== "workspaces";
   const fallback = target.kind === "projects" ? "Folder" : null;
   const iconColor = draft.color ?? theme.colors.foregroundMuted;
+  // Keep an icon picked from search in view when the dialog opens again.
+  const picked = initial.icon?.startsWith("lucide:") ? initial.icon.slice("lucide:".length) : null;
+  const listed = picked && !ICONS.includes(picked) ? [picked, ...ICONS] : ICONS;
+  const shown = query.trim() ? searchIcons(query, 48) : listed.filter((name) => name !== fallback);
   const title =
     target.kind === "workspaces"
       ? t("decorate.titleColor", { name: target.name })
@@ -301,6 +308,24 @@ export function DecorateDialog({
         {withIcon ? (
           <View style={{ gap: 8 }}>
             <SectionTitle title={t("decorate.icon")} theme={theme} />
+            <TextInput
+              accessibilityLabel={t("decorate.iconSearchLabel")}
+              onChangeText={setQuery}
+              placeholder={t("decorate.iconSearchPlaceholder")}
+              placeholderTextColor={theme.colors.foregroundMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                color: theme.colors.foreground,
+                fontSize: 14,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surface1,
+              }}
+            />
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
               <IconCell
                 label={fallback ? t("decorate.defaultIcon") : t("decorate.noIcon")}
@@ -317,7 +342,7 @@ export function DecorateDialog({
                   <Icon name="Ban" size={15} color={theme.colors.foregroundMuted} />
                 )}
               </IconCell>
-              {ICONS.filter((name) => name !== fallback).map((name) => (
+              {shown.map((name) => (
                 <IconCell
                   key={name}
                   label={name}
@@ -332,6 +357,11 @@ export function DecorateDialog({
                 </IconCell>
               ))}
             </View>
+            {shown.length === 0 ? (
+              <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>
+                {t("decorate.noIconMatch")}
+              </Text>
+            ) : null}
             <TextInput
               key={emojiField}
               accessibilityLabel={t("decorate.emojiLabel")}
