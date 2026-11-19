@@ -70,6 +70,7 @@ function render(name, props, { showFoldedStatus, statuses, workspaces = [] }) {
     "./i18n": { useT: () => (key) => key },
     "./model": model,
     "./project-icon": { ProjectIcon: "ProjectIcon" },
+    "./labels": { LabelChip: "LabelChip", labelKey: (name) => name.toLowerCase(), useLabelCatalog: () => ({ labels: null, refresh() {} }) },
     "./look": { useLook: () => ({ icon: 13, showFoldedStatus, showPinned: true }) },
     "./drag": {
       useDrag: () => ({ recentlyDropped: () => false }),
@@ -388,4 +389,14 @@ test("time sorts put the newest workspace first", () => {
   assert.deepEqual(keys("created"), ["b", "a", "c"]);
   // Last prompt falls back to creation time.
   assert.deepEqual(keys("lastPrompt"), ["a", "b", "c"]);
+});
+
+test("compact ages match the app's", () => {
+  const now = Date.parse("2026-11-19T12:00:00Z");
+  const ago = (ms) => model.compactTimeAgo(new Date(now - ms).toISOString(), now);
+  assert.equal(ago(20_000), "now");
+  assert.equal(ago(5 * 60_000), "5m");
+  assert.equal(ago(2 * 3_600_000), "2h");
+  assert.equal(ago(3 * 86_400_000), "3d");
+  assert.equal(model.compactTimeAgo("not a date", now), "");
 });

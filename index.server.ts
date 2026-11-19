@@ -1,7 +1,8 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { projectIds, removeProject } from "./server/remove-project";
 import { createProjectIconReader } from "./server/project-icon";
-import { projectIconRpc, projectIdsRpc, removeProjectRpc } from "./shared/rpc";
+import { createWorkspaceActions } from "./server/workspace-actions";
+import { labelCatalogRpc, markWorkspaceRpc, projectIconRpc, projectIdsRpc, removeProjectRpc } from "./shared/rpc";
 import { decorationsDocument, groupsDocument } from "./shared/settings";
 
 export default function contribute(server: PluginServerContext) {
@@ -12,5 +13,10 @@ export default function contribute(server: PluginServerContext) {
   server.handle(projectIdsRpc, projectIds);
   const icons = createProjectIconReader();
   server.handle(projectIconRpc, icons.read);
-  return () => icons.close();
+  const workspaces = createWorkspaceActions();
+  server.handle(labelCatalogRpc, workspaces.labels);
+  server.handle(markWorkspaceRpc, workspaces.mark);
+  return async () => {
+    await Promise.all([icons.close(), workspaces.close()]);
+  };
 }

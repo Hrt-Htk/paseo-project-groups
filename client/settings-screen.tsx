@@ -15,6 +15,7 @@ import {
   GROUP_SPACINGS,
   INDENTS,
   LANGUAGES,
+  ROW_TRAILINGS,
   TEXT_SIZES,
   WORKSPACE_SORTS,
   WORKSPACE_TITLES,
@@ -62,11 +63,13 @@ function Preview({ values, theme }: { values: AppearanceValues; theme: PluginSur
         <Text numberOfLines={1} style={styles.workspaceName}>
           {t("settings.sampleWorkspace")}
         </Text>
-        {look.showDiffStats ? (
+        {look.trailing === "diff" ? (
           <Text style={styles.detail}>
             <Text style={{ color: theme.colors.statusSuccess }}>+42</Text>{" "}
             <Text style={{ color: theme.colors.statusDanger }}>−7</Text>
           </Text>
+        ) : look.trailing === "timestamp" ? (
+          <Text style={styles.detail}>5m</Text>
         ) : null}
       </View>
       <View style={[styles.row, { paddingLeft: look.workspaceIndent }]}>
@@ -216,6 +219,23 @@ export function AppearanceSettings({ theme }: PluginSurfaceProps) {
             onValueChange={(workspaceTitle) => update({ workspaceTitle })}
           />
           <SettingsSwitch
+            label={t("settings.showBranch")}
+            hint={t("settings.showBranchHint")}
+            value={values.showBranch}
+            onValueChange={(showBranch) => update({ showBranch })}
+          />
+          <SettingsSwitch
+            label={t("settings.showLabels")}
+            value={values.showLabels}
+            onValueChange={(showLabels) => update({ showLabels })}
+          />
+          <SettingsSelect
+            label={t("settings.rowTrailing")}
+            value={values.rowTrailing ?? (values.showDiffStats ? "diff" : "none")}
+            options={ROW_TRAILINGS.map((trailing) => ({ value: trailing, label: t(`settings.rowTrailings.${trailing}`) }))}
+            onValueChange={(rowTrailing) => update({ rowTrailing })}
+          />
+          <SettingsSwitch
             label={t("settings.backgroundWorkspaces")}
             hint={t("settings.backgroundWorkspacesHint")}
             value={values.showBackground}
@@ -253,11 +273,6 @@ export function AppearanceSettings({ theme }: PluginSurfaceProps) {
             hint={t("settings.foldedStatusHint")}
             value={values.showFoldedStatus}
             onValueChange={(showFoldedStatus) => update({ showFoldedStatus })}
-          />
-          <SettingsSwitch
-            label={t("settings.diffStats")}
-            value={values.showDiffStats}
-            onValueChange={(showDiffStats) => update({ showDiffStats })}
           />
           <SettingsSwitch
             label={t("settings.pinnedSection")}

@@ -8,13 +8,14 @@ import {
   type WorkspaceRef,
 } from "@getpaseo/plugin/client";
 import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useDrag, useDragHandle, useDragSlot } from "./drag";
 import { DecorIcon, useDecorations } from "./decor";
 import { useT } from "./i18n";
 import { useLook, type Look } from "./look";
-import { compareWorkspaceTimes, mostUrgent } from "./model";
+import { LabelChip, labelKey, useLabelCatalog } from "./labels";
+import { compactTimeAgo, compareWorkspaceTimes, mostUrgent } from "./model";
 import { ProjectIcon } from "./project-icon";
 import type { ProjectGroup } from "../shared/settings";
 
@@ -631,18 +632,25 @@ export function WorkspaceRow({
     indicatorLabel: item.indicatorLabel,
     additions: item.diffStat?.additions ?? 0,
     deletions: item.diffStat?.deletions ?? 0,
+    branch: item.branch,
+    labels: item.labels,
+    enteredAt: item.statusEnteredAt,
   }));
   const open = useCallback(() => view.navigation.openWorkspace(reference), [view.navigation, reference]);
   if (!workspace) return null;
+  const branch = look.showBranch && workspace.branch && workspace.branch !== workspace.title ? workspace.branch : null;
+  const labels = look.showLabels ? workspace.labels : [];
   const active = view.active.workspace?.key === reference.key;
   const tone = workspace.indicator === "done" ? null : INDICATOR_COLOR[workspace.indicator];
   const color = tone ? view.theme.colors[tone] : "transparent";
-  const diff =
-    look.showDiffStats && (workspace.additions || workspace.deletions) ? (
+  const trailing =
+    look.trailing === "diff" && (workspace.additions || workspace.deletions) ? (
       <Text selectable={false} numberOfLines={1} style={styles.detail}>
         <Text style={{ color: view.theme.colors.statusSuccess }}>+{workspace.additions}</Text>{" "}
         <Text style={{ color: view.theme.colors.statusDanger }}>−{workspace.deletions}</Text>
       </Text>
+    ) : look.trailing === "timestamp" && workspace.enteredAt ? (
+      <TimeAgo iso={workspace.enteredAt} style={styles.detail} />
     ) : null;
   return (
     <Pressable
@@ -658,18 +666,23 @@ export function WorkspaceRow({
       style={[styles.row, styles.rounded, { paddingLeft: indent }, active ? styles.selected : null]}
     >
       {look.showStatusDots ? <StatusDot color={color} running={workspace.indicator === "running"} /> : null}
-      <Text
-        selectable={false}
-        numberOfLines={1}
-        style={[
-          styles.workspaceName,
-          nameColor ? { color: nameColor } : null,
-          active || hover.hovered ? { opacity: 1 } : null,
-        ]}
-      >
-        {workspace.title}
-      </Text>
-      <RowActions show={hover.show} slots={1} iconSize={look.icon} detail={diff}>
+      <View style={{ flex: 1, minWidth: 0, paddingVertical: branch || labels.length ? 3 : 0 }}>
+        <Text
+          selectable={false}
+          numberOfLines={1}
+          style={[
+            styles.workspaceName,
+            nameColor ? { color: nameColor } : null,
+            active || hover.hovered ? { opacity: 1 } : null,
+          ]}
+        >
+          {workspace.title}
+        </Text>
+        {branch || labels.length ? (
+          <MetaLine hostId={reference.hostId} branch={branch} labels={labels} theme={view.theme} />
+        ) : null}
+      </View>
+      <RowActions show={hover.show} slots={1} iconSize={look.icon} detail={trailing}>
         <ActionButton
           icon="Ellipsis"
           label={t("workspace.actions", { name: workspace.title })}
@@ -680,6 +693,71 @@ export function WorkspaceRow({
         />
       </RowActions>
     </Pressable>
+  );
+}
+
+/** The line under a workspace name: its branch, then its labels, like the app's meta row. */
+function MetaLine({
+  hostId,
+  branch,
+  labels,
+  theme,
+}: {
+  hostId: string;
+  branch: string | null;
+  labels: readonly string[];
+  theme: Theme;
+}) {
+  const look = useLook();
+  const styles = useRowStyles(theme);
+  const catalog = useLabelCatalog(hostId);
+  const colors = new Map((catalog.labels ?? []).map((label) => [labelKey(label.name), label.color]));
+  const items: ReactNode[] = [];
+  if (branch) {
+    items.push(
+      <View key="branch" style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}>
+        <Icon name="GitBranch" size={look.small} color={theme.colors.foregroundMuted} />
+        <Text selectable={false} numberOfLines={1} style={[styles.detail, { flexShrink: 1 }]}>
+          {branch}
+        </Text>
+      </View>,
+    );
+  }
+  for (const label of labels) {
+    items.push(
+      <LabelChip
+        key={`label:${labelKey(label)}`}
+        name={label}
+        color={colors.get(labelKey(label))}
+        theme={theme}
+        fontSize={look.small}
+        lineHeight={look.smallLine}
+      />,
+    );
+  }
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, minWidth: 0, overflow: "hidden" }}>
+      {items.map((item, index) => (
+        <Fragment key={index}>
+          {index > 0 && index === 1 && branch ? <Text style={styles.detail}>·</Text> : null}
+          {item}
+        </Fragment>
+      ))}
+    </View>
+  );
+}
+
+/** A compact age that keeps itself current. */
+function TimeAgo({ iso, style }: { iso: string; style: object }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <Text selectable={false} numberOfLines={1} style={style}>
+      {compactTimeAgo(iso, now)}
+    </Text>
   );
 }
 

@@ -44,9 +44,11 @@ function loadClient(file, host = {}) {
       useToast: () => ({ show: noop, error: noop }),
     },
     "./i18n": { useT: () => (key) => key },
-    "./model": { mostUrgent: () => "done", compareWorkspaceTimes: () => () => 0 },
+    "./model": { mostUrgent: () => "done", compareWorkspaceTimes: () => () => 0, compactTimeAgo: () => "" },
     "./project-icon": { ProjectIcon: "ProjectIcon" },
+    "./labels": { LabelChip: "LabelChip", labelKey: (name) => name.toLowerCase(), useLabelCatalog: () => ({ labels: null, refresh() {} }) },
     "./look": { useLook: () => ({ icon: 13, text: 12, line: 16, small: 11 }) },
+    "../shared/rpc": { markWorkspaceRpc: {} },
     "./drag": {
       useDrag: () => ({ recentlyDropped: () => false }),
       useDragSlot: () => null,
@@ -93,6 +95,7 @@ async function workspaceEditor(onRender = noop, overrides = {}) {
   };
   const { WorkspaceMenuDialog } = loadClient("dialogs.tsx", {
     useWorkspace: (_reference, _selector) => workspace,
+    useRpc: () => async () => ({ done: true }),
     usePaseo: () => ({
       workspaces: {
         ref: () => ({
