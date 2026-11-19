@@ -1,6 +1,7 @@
 import {
   usePaseo,
   useProject,
+  useRpc,
   useWorkspace,
   useWorkspaces,
   type PluginSidebarViewProps,
@@ -11,7 +12,9 @@ import { Icon, Modal, TextInput, copyText, useToast } from "@getpaseo/plugin/cli
 import { useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useT } from "./i18n";
+import { labelColors, labelKey, useLabelCatalog } from "./labels";
 import { groupOfProject, type Parents } from "./model";
+import { markWorkspaceRpc } from "../shared/rpc";
 import type { ProjectGroup } from "../shared/settings";
 
 type Theme = PluginSidebarViewProps["theme"];
@@ -390,8 +393,11 @@ export function WorkspaceMenuDialog({
     directory: item.directory,
     branch: item.branch,
     worktree: item.kind === "worktree",
+    labels: item.labels,
+    status: item.status,
   }));
-  const [step, setStep] = useState<"menu" | "rename" | "archive">("menu");
+  const [step, setStep] = useState<"menu" | "rename" | "archive" | "labels">("menu");
+  const mark = useRpc(markWorkspaceRpc);
   const [initialName, setInitialName] = useState("");
   const draftName = useRef("");
   const [busy, setBusy] = useState(false);
@@ -468,6 +474,18 @@ export function WorkspaceMenuDialog({
     );
   }
 
+  if (step === "labels") {
+    return (
+      <WorkspaceLabelsDialog
+        reference={reference}
+        name={workspace.title}
+        assigned={workspace.labels}
+        theme={theme}
+        onClose={onClose}
+      />
+    );
+  }
+
   if (step === "archive") {
     return (
       <Modal
@@ -520,6 +538,28 @@ export function WorkspaceMenuDialog({
             setStep("rename");
           }}
         />
+        {workspace.status === "attention" || workspace.status === "failed" || workspace.status === "done" ? (
+          <MenuRow
+            label={workspace.status === "done" ? t("workspace.markUnread") : t("workspace.markRead")}
+            icon={workspace.status === "done" ? "CircleDot" : "CircleCheck"}
+            theme={theme}
+            disabled={busy}
+            onPress={() =>
+              void run(
+                async () => {
+                  const result = await mark({
+                    hostId: reference.hostId,
+                    workspaceId: reference.id,
+                    read: workspace.status !== "done",
+                  });
+                  if (!result.done) throw new Error(t("workspace.markOtherHost"));
+                },
+                workspace.status === "done" ? t("workspace.markUnread") : t("workspace.markRead"),
+                t("workspace.markFailed"),
+              )
+            }
+          />
+        ) : null}
         <MenuRow
           label={t("workspace.color")}
           icon="Palette"
@@ -539,6 +579,7 @@ export function WorkspaceMenuDialog({
             )
           }
         />
+        <MenuRow label={t("workspace.labels")} icon="Tag" theme={theme} onPress={() => setStep("labels")} />
         <MenuRow
           label={t("workspace.copyPath")}
           icon="Copy"
@@ -560,6 +601,133 @@ export function WorkspaceMenuDialog({
           danger
           onPress={() => setStep("archive")}
         />
+      </Modal.Content>
+    </Modal>
+  );
+}
+
+/**
+ * Ticks the workspace's labels on and off, like the app's Labels submenu. Lists the host's labels
+ * with their colors, plus any name seen on a workspace when the host's list is unavailable.
+ */
+function WorkspaceLabelsDialog({
+  reference,
+  name,
+  assigned,
+  theme,
+  onClose,
+}: {
+  reference: WorkspaceRef;
+  name: string;
+  assigned: readonly string[];
+  theme: Theme;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const paseo = usePaseo();
+  const toast = useToast();
+  const catalog = useLabelCatalog(reference.hostId);
+  // Grouping by label yields one group per label name in use on this host.
+  const seenNames = useWorkspaces({
+    where: (item) => item.hostId === reference.hostId,
+    groupBy: (item) => item.labels,
+  }).map((group) => group.key);
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState("");
+  const assignedKeys = new Set(assigned.map(labelKey));
+  const colors = new Map((catalog.labels ?? []).map((label) => [labelKey(label.name), label.color]));
+  const names = new Map<string, string>();
+  for (const label of catalog.labels ?? []) names.set(labelKey(label.name), label.name);
+  for (const label of [...seenNames, ...assigned]) if (!names.has(labelKey(label))) names.set(labelKey(label), label);
+  const list = [...names.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
+  const toggle = async (label: string, on: boolean) => {
+    setBusy(true);
+    try {
+      await paseo.workspaces.ref(reference).setLabel(label, { assigned: on });
+      await catalog.refresh();
+    } catch (error) {
+      toast.error(`${t("workspace.labelsFailed")} ${errorText(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = () => {
+    const label = draft.replace(/\s+/g, " ").trim();
+    if (!label) return;
+    setDraft("");
+    void toggle(label, true);
+  };
+
+  return (
+    <Modal title={t("workspace.labelsTitle", { name })} open onOpenChange={closeOnDismiss(onClose)}>
+      <Modal.Content contentContainerStyle={{ padding: 8, gap: 8 }}>
+        <View style={{ gap: 2 }}>
+          {list.length === 0 ? <MenuHint text={t("workspace.labelsEmpty")} theme={theme} /> : null}
+          {list.map((label) => {
+            const on = assignedKeys.has(labelKey(label));
+            return (
+              <Pressable
+                key={labelKey(label)}
+                accessibilityRole="checkbox"
+                accessibilityLabel={label}
+                accessibilityState={{ checked: on, disabled: busy }}
+                disabled={busy}
+                onPress={() => void toggle(label, !on)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  minHeight: 36,
+                  paddingHorizontal: 10,
+                  borderRadius: 6,
+                  opacity: busy ? 0.6 : 1,
+                }}
+              >
+                <View
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: labelColors(colors.get(labelKey(label)), theme).text,
+                  }}
+                />
+                <Text numberOfLines={1} style={{ flex: 1, color: theme.colors.foreground, fontSize: 13 }}>
+                  {label}
+                </Text>
+                {on ? <Icon name="Check" size={15} color={theme.colors.accent} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <TextInput
+            accessibilityLabel={t("workspace.newLabel")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={draft}
+            onChangeText={setDraft}
+            onSubmitEditing={add}
+            editable={!busy}
+            placeholder={t("workspace.newLabelPlaceholder")}
+            placeholderTextColor={theme.colors.foregroundMuted}
+            style={{
+              flex: 1,
+              color: theme.colors.foreground,
+              fontSize: 13,
+              paddingVertical: 8,
+              paddingHorizontal: 10,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.surface1,
+            }}
+          />
+          <DialogButton label={t("workspace.addLabel")} theme={theme} onPress={add} disabled={busy || !draft.trim()} />
+        </View>
+        <Buttons>
+          <DialogButton label={t("workspace.labelsDone")} theme={theme} kind="primary" onPress={onClose} />
+        </Buttons>
       </Modal.Content>
     </Modal>
   );

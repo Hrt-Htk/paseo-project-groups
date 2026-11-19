@@ -15,8 +15,15 @@ export interface IconDaemon {
   }>;
 }
 
+/** Calls the public PaseoApi lacks: label colors and read state. */
+export interface LocalDaemon extends IconDaemon {
+  listWorkspaceLabels(): Promise<{ labels: readonly { name: string; color: string }[] }>;
+  clearWorkspaceAttention(workspaceId: string): Promise<void>;
+  markWorkspaceUnread(workspaceId: string): Promise<void>;
+}
+
 /** The public PaseoApi has no icon read yet. Isolate the host-version adapter here. */
-async function connectIconDaemon(): Promise<IconDaemon> {
+export async function connectLocalDaemon(clientId = "cid_project_groups_icons"): Promise<LocalDaemon> {
   const entry = process.argv[1];
   if (!entry) throw new Error("Paseo host modules are unavailable");
   const require = createRequire(entry);
@@ -34,9 +41,9 @@ async function connectIconDaemon(): Promise<IconDaemon> {
     : undefined;
   const url = socketPath ? `ws+unix://${socketPath}:/ws` : `ws://${listen}/ws`;
   const WebSocket = ws.default ?? ws.WebSocket;
-  const daemon: IconDaemon = new client.DaemonClient({
+  const daemon: LocalDaemon = new client.DaemonClient({
     url,
-    clientId: "cid_project_groups_icons",
+    clientId,
     clientType: "cli",
     localCredential: () => control.readLocalCredentialForTarget(home, listen) ?? undefined,
     connectTimeoutMs: 10_000,
@@ -65,7 +72,7 @@ export function renderableIcon(icon: { mimeType: string; data: string } | null):
 }
 
 /** Share one local connection across rows; release it when the plugin unloads. */
-export function createProjectIconReader(connect = connectIconDaemon) {
+export function createProjectIconReader(connect: () => Promise<IconDaemon> = connectLocalDaemon) {
   let connection: Promise<IconDaemon> | null = null;
   let stopped = false;
   const refreshes = new WeakMap<IconDaemon, Promise<unknown>>();

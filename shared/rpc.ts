@@ -34,3 +34,20 @@ export const projectIconRpc = defineRpc({
   input: z.object({ hostId: z.string().min(1), projectId: z.string().min(1) }),
   output: z.object({ icon: projectIconSchema.nullable() }),
 });
+
+/**
+ * A host's workspace labels with their colors, which the plugin SDK does not expose. `labels` is
+ * null when the call reached another host's daemon.
+ */
+export const labelCatalogRpc = defineRpc({
+  name: "labels.list",
+  input: z.object({ hostId: z.string().min(1) }),
+  output: z.object({ labels: z.array(z.object({ name: z.string(), color: z.string() })).nullable() }),
+});
+
+/** Mark as read clears a workspace's attention; mark as unread sets it again. */
+export const markWorkspaceRpc = defineRpc({
+  name: "workspace.mark",
+  input: z.object({ hostId: z.string().min(1), workspaceId: z.string().min(1), read: z.boolean() }),
+  output: z.object({ done: z.boolean() }),
+});
