@@ -222,7 +222,6 @@ export function GroupHeader({
   const styles = useRowStyles(view.theme);
   const controller = useDrag();
   const slotRef = useDragSlot(`g:${group.id}`, { kind: "group", groupId: group.id });
-  const handle = useDragHandle({ kind: "group", id: group.id, label: group.name });
   const hover = useHover(view.layout);
   const [initialName, setInitialName] = useState(group.name);
   const draftName = useRef(group.name);
@@ -243,6 +242,7 @@ export function GroupHeader({
     if (controller.recentlyDropped()) return;
     onToggle(group.id);
   }, [controller, onToggle, group.id]);
+  const handle = useDragHandle({ kind: "group", id: group.id, label: group.name }, toggle);
 
   const beginRename = useCallback(() => {
     draftName.current = group.name;
@@ -737,7 +737,6 @@ export function ProjectBlock({
     projectKey: reference.key,
     groupId,
   });
-  const handle = useDragHandle({ kind: "project", key: reference.key, label: name });
   const hover = useHover(view.layout);
   const muted = view.theme.colors.foregroundMuted;
   const t = useT();
@@ -751,6 +750,7 @@ export function ProjectBlock({
     if (controller.recentlyDropped()) return;
     onToggle(reference.key);
   }, [controller, onToggle, reference.key]);
+  const handle = useDragHandle({ kind: "project", key: reference.key, label: name }, toggle);
   const create = useCallback(() => view.navigation.openProject(reference), [view.navigation, reference]);
 
   if (!project) return null;

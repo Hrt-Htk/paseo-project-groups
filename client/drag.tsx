@@ -47,8 +47,8 @@ export interface DragController {
   register(id: string, slot: Slot, node: View | null): void;
   /** A press began on a draggable row. The drag starts only if the pointer then moves. */
   press(subject: DragSubject): void;
-  /** Touch devices: a long press arms the pressed row and freezes scrolling. */
-  armTouch(): void;
+  /** Touch devices: a long press arms the pressed row and freezes scrolling. False for a mouse press. */
+  armTouch(): boolean;
   /** The press ended without a drag. */
   release(): void;
   isDragging(): boolean;
@@ -243,9 +243,11 @@ export function useDragController(
         mousePress = WEB && lastPointerType === "mouse";
       },
       armTouch() {
-        if (!pressed || mousePress) return;
+        if (mousePress) return false;
+        if (!pressed) return true;
         touchArmed = true;
         setScrollLocked(true);
+        return true;
       },
       release() {
         // Keep `pressed`: the web responder may end the row press before the surface's
@@ -352,11 +354,15 @@ export interface DragHandle {
 /**
  * Makes a row draggable. With a mouse, moving 4 points while pressed starts the drag.
  * With touch, a long press arms the row first so ordinary swipes still scroll.
+ * `onPress` is the row's own press action.
  */
-export function useDragHandle(subject: DragSubject): DragHandle {
+export function useDragHandle(subject: DragSubject, onPress: () => void): DragHandle {
   const controller = useDrag();
   const subjectRef = useRef(subject);
   subjectRef.current = subject;
+  const onPressRef = useRef(onPress);
+  onPressRef.current = onPress;
+  const mouseLongPress = useRef(false);
 
   const pressCapture = useMemo(
     () => ({
@@ -367,8 +373,19 @@ export function useDragHandle(subject: DragSubject): DragHandle {
     }),
     [controller],
   );
-  const onLongPress = useCallback(() => controller.armTouch(), [controller]);
-  const onPressOut = useCallback(() => controller.release(), [controller]);
+  const onLongPress = useCallback(() => {
+    mouseLongPress.current = !controller.armTouch();
+  }, [controller]);
+  const onPressOut = useCallback(() => {
+    controller.release();
+    if (!mouseLongPress.current) return;
+    mouseLongPress.current = false;
+    // react-native-web drops the click after a long press, so a still mouse press would do
+    // nothing. Run it here, after the drag surface had its chance to take the press.
+    setTimeout(() => {
+      if (!controller.isDragging()) onPressRef.current();
+    }, 0);
+  }, [controller]);
 
   return { pressCapture, onLongPress, onPressOut };
 }
