@@ -48,7 +48,7 @@ When the app is connected to more than one host, projects from all of them show 
 
 Projects show the image you gave them in Paseo, or a folder when they have none.
 
-To change a look, click a project's icon or a group's palette button. Pick one of 11 colors and one of 36 icons, or type a single emoji. For a workspace, use Set color in its ⋯ menu. The color goes on the name and the icon.
+To change a look, click a project's icon or a group's palette button. Pick one of 11 colors and one of 36 icons, search all Lucide icons by name, or type a single emoji. For a workspace, use Set color in its ⋯ menu. The color goes on the name and the icon.
 
 What you pick here only shows in this view and changes nothing in Paseo. Reset the icon to bring back the project's own image. Images can be PNG, JPEG, GIF or WebP, or an SVG that loads no outside files.
 

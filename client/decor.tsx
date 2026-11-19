@@ -1,9 +1,10 @@
 import type { PluginSidebarViewProps } from "@getpaseo/plugin/client";
-import { Icon, Modal, TextInput } from "@getpaseo/plugin/client/ui";
+import { Icon, Modal, ScrollView, TextInput } from "@getpaseo/plugin/client/ui";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Decoration, DecorationKind, DecorationsValues } from "../shared/settings";
 import { useT } from "./i18n";
+import { searchIcons } from "./lucide-names";
 import { firstGraphemes } from "./text";
 
 type Theme = PluginSidebarViewProps["theme"];
@@ -23,7 +24,7 @@ export const PALETTE = [
   { color: "#8B8D98", name: "gray" },
 ] as const;
 
-/** Lucide names offered in the picker. Any emoji works through the text field as well. */
+/** Lucide names offered in the picker. Search reaches the rest; any emoji works as well. */
 export const ICONS: readonly string[] = [
   "Folder",
   "FolderGit2",
@@ -62,6 +63,9 @@ export const ICONS: readonly string[] = [
   "Flag",
   "Lightbulb",
 ];
+
+/** Five rows of 36px icon cells with 4px gaps, so typing a search never resizes the dialog. */
+const ICON_GRID_HEIGHT = 5 * 36 + 4 * 4;
 
 export const EMPTY_DECORATION: Decoration = { color: null, icon: null };
 
@@ -233,9 +237,15 @@ export function DecorateDialog({
     setEmojiSeed("");
     setEmojiField((field) => field + 1);
   };
+  // Uncontrolled like the emoji field; the state only mirrors what was typed.
+  const [query, setQuery] = useState("");
   const withIcon = target.kind !== "workspaces";
   const fallback = target.kind === "projects" ? "Folder" : null;
   const iconColor = draft.color ?? theme.colors.foregroundMuted;
+  // Keep an icon picked from search in view when the dialog opens again.
+  const picked = initial.icon?.startsWith("lucide:") ? initial.icon.slice("lucide:".length) : null;
+  const listed = picked && !ICONS.includes(picked) ? [picked, ...ICONS] : ICONS;
+  const shown = query.trim() ? searchIcons(query, 48) : listed.filter((name) => name !== fallback);
   const title =
     target.kind === "workspaces"
       ? t("decorate.titleColor", { name: target.name })
@@ -301,37 +311,62 @@ export function DecorateDialog({
         {withIcon ? (
           <View style={{ gap: 8 }}>
             <SectionTitle title={t("decorate.icon")} theme={theme} />
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
-              <IconCell
-                label={fallback ? t("decorate.defaultIcon") : t("decorate.noIcon")}
-                selected={draft.icon === null}
-                theme={theme}
-                onPress={() => {
-                  clearEmojiField();
-                  setDraft((current) => ({ ...current, icon: null }));
-                }}
-              >
-                {fallback ? (
-                  <Icon name={fallback} size={17} color={iconColor} />
-                ) : (
-                  <Icon name="Ban" size={15} color={theme.colors.foregroundMuted} />
-                )}
-              </IconCell>
-              {ICONS.filter((name) => name !== fallback).map((name) => (
+            <TextInput
+              accessibilityLabel={t("decorate.iconSearchLabel")}
+              onChangeText={setQuery}
+              placeholder={t("decorate.iconSearchPlaceholder")}
+              placeholderTextColor={theme.colors.foregroundMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                color: theme.colors.foreground,
+                fontSize: 14,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surface1,
+              }}
+            />
+            <ScrollView style={{ height: ICON_GRID_HEIGHT }} nestedScrollEnabled>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
                 <IconCell
-                  key={name}
-                  label={name}
-                  selected={draft.icon === `lucide:${name}`}
+                  label={fallback ? t("decorate.defaultIcon") : t("decorate.noIcon")}
+                  selected={draft.icon === null}
                   theme={theme}
                   onPress={() => {
                     clearEmojiField();
-                    setDraft((current) => ({ ...current, icon: `lucide:${name}` }));
+                    setDraft((current) => ({ ...current, icon: null }));
                   }}
                 >
-                  <Icon name={name} size={17} color={iconColor} />
+                  {fallback ? (
+                    <Icon name={fallback} size={17} color={iconColor} />
+                  ) : (
+                    <Icon name="Ban" size={15} color={theme.colors.foregroundMuted} />
+                  )}
                 </IconCell>
-              ))}
-            </View>
+                {shown.map((name) => (
+                  <IconCell
+                    key={name}
+                    label={name}
+                    selected={draft.icon === `lucide:${name}`}
+                    theme={theme}
+                    onPress={() => {
+                      clearEmojiField();
+                      setDraft((current) => ({ ...current, icon: `lucide:${name}` }));
+                    }}
+                  >
+                    <Icon name={name} size={17} color={iconColor} />
+                  </IconCell>
+                ))}
+              </View>
+              {shown.length === 0 ? (
+                <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>
+                  {t("decorate.noIconMatch")}
+                </Text>
+              ) : null}
+            </ScrollView>
             <TextInput
               key={emojiField}
               accessibilityLabel={t("decorate.emojiLabel")}

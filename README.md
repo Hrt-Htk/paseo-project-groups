@@ -24,7 +24,7 @@ Installing does not change the sidebar. Open **Settings → Sidebar** and set **
 - Drag group headers to reorder groups. Fold the ones you aren't using.
 - Put a project under another project from its ⋯ menu (one level deep).
 - With several hosts connected, Ungrouped splits by host and grouped projects show a host tag.
-- Give groups and projects a color and an icon or emoji. Workspaces get a color.
+- Give groups and projects a color and an icon (any Lucide icon, searchable by name) or emoji. Workspaces get a color.
 - Projects use their Paseo image unless you choose a plugin icon or emoji.
 - Folded projects and groups show the most urgent workspace status on their icon, and a light fill when they hold the workspace you have open.
 - Use the ⋯ menus to move, rename, pin, archive or remove things.
