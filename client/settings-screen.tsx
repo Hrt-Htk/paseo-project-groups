@@ -16,6 +16,8 @@ import {
   INDENTS,
   LANGUAGES,
   TEXT_SIZES,
+  WORKSPACE_SORTS,
+  WORKSPACE_TITLES,
   type AppearanceValues,
 } from "../shared/settings";
 import { useT } from "./i18n";
@@ -194,6 +196,30 @@ export function AppearanceSettings({ theme }: PluginSurfaceProps) {
             value={values.indent}
             options={INDENTS.map((indent) => ({ value: indent, label: t(`settings.indents.${indent}`) }))}
             onValueChange={(indent) => update({ indent })}
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.workspaces")}>
+        <SettingsCard>
+          <SettingsSelect
+            label={t("settings.workspaceSort")}
+            value={values.workspaceSort}
+            options={WORKSPACE_SORTS.map((sort) => ({ value: sort, label: t(`settings.workspaceSorts.${sort}`) }))}
+            onValueChange={(workspaceSort) => update({ workspaceSort })}
+          />
+          <SettingsSelect
+            label={t("settings.workspaceTitle")}
+            hint={t("settings.workspaceTitleHint")}
+            value={values.workspaceTitle}
+            options={WORKSPACE_TITLES.map((title) => ({ value: title, label: t(`settings.workspaceTitles.${title}`) }))}
+            onValueChange={(workspaceTitle) => update({ workspaceTitle })}
+          />
+          <SettingsSwitch
+            label={t("settings.backgroundWorkspaces")}
+            hint={t("settings.backgroundWorkspacesHint")}
+            value={values.showBackground}
+            onValueChange={(showBackground) => update({ showBackground })}
           />
         </SettingsCard>
       </SettingsSection>

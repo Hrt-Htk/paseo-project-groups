@@ -329,7 +329,8 @@ function GroupsList(view: PluginSidebarViewProps) {
 
   const projects = useProjects({ orderBy: "displayName" });
   const pinned = useWorkspaces({
-    where: (item) => look.showPinned && !!item.pinnedAt && !item.background && !item.archivingAt,
+    where: (item) =>
+      look.showPinned && !!item.pinnedAt && (look.showBackground || !item.background) && !item.archivingAt,
     orderBy: "pinnedAt",
   });
   const byKey = useMemo(() => new Map(projects.map((project) => [project.key, project])), [projects]);

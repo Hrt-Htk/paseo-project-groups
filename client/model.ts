@@ -14,6 +14,20 @@ export function mostUrgent(statuses: Iterable<string>): WorkspaceIndicator {
   return URGENCY[best];
 }
 
+/** Newest first by the chosen time, like the app; "last prompt" falls back to creation. */
+export function compareWorkspaceTimes(
+  sort: "created" | "lastPrompt",
+): (
+  a: { createdAt: string | null; lastPromptAt: string | null; ref: { key: string } },
+  b: { createdAt: string | null; lastPromptAt: string | null; ref: { key: string } },
+) => number {
+  const time = (item: { createdAt: string | null; lastPromptAt: string | null }) => {
+    const value = sort === "lastPrompt" ? (item.lastPromptAt ?? item.createdAt) : item.createdAt;
+    return value ? Date.parse(value) || 0 : 0;
+  };
+  return (a, b) => time(b) - time(a) || a.ref.key.localeCompare(b.ref.key);
+}
+
 /** The app's route for a project's settings page. */
 export function projectSettingsPath(project: { hostId: string; id: string }): string {
   return `/settings/hosts/${encodeURIComponent(project.hostId)}/projects/${encodeURIComponent(project.id)}`;
