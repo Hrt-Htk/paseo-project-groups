@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import { appearanceDocument, type AppearanceValues } from "../shared/settings";
+import { appearanceDocument, type AppearanceValues, type WorkspaceSort, type WorkspaceTitle } from "../shared/settings";
 
 /** Concrete sizes derived from the appearance settings. Every row reads these. */
 export interface Look {
@@ -21,6 +21,9 @@ export interface Look {
   showFoldedStatus: boolean;
   showDiffStats: boolean;
   showPinned: boolean;
+  workspaceSort: WorkspaceSort;
+  workspaceTitle: WorkspaceTitle;
+  showBackground: boolean;
 }
 
 const ROW = { compact: 24, comfortable: 28, spacious: 34 } as const;
@@ -59,6 +62,9 @@ export function lookFrom(values: AppearanceValues): Look {
     showFoldedStatus: values.showFoldedStatus,
     showDiffStats: values.showDiffStats,
     showPinned: values.showPinned,
+    workspaceSort: values.workspaceSort,
+    workspaceTitle: values.workspaceTitle,
+    showBackground: values.showBackground,
   };
 }
 

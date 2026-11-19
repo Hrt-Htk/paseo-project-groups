@@ -44,7 +44,7 @@ function loadClient(file, host = {}) {
       useToast: () => ({ show: noop, error: noop }),
     },
     "./i18n": { useT: () => (key) => key },
-    "./model": { mostUrgent: () => "done" },
+    "./model": { mostUrgent: () => "done", compareWorkspaceTimes: () => () => 0 },
     "./project-icon": { ProjectIcon: "ProjectIcon" },
     "./look": { useLook: () => ({ icon: 13, text: 12, line: 16, small: 11 }) },
     "./drag": {

@@ -378,3 +378,14 @@ test("project settings path matches the app's route", () => {
     "/settings/hosts/srv_a%20b/projects/prj%2F1",
   );
 });
+
+test("time sorts put the newest workspace first", () => {
+  const item = (key, createdAt, lastPromptAt = null) => ({ ref: { key }, createdAt, lastPromptAt });
+  const a = item("a", "2026-11-01T00:00:00Z", "2026-11-10T00:00:00Z");
+  const b = item("b", "2026-11-05T00:00:00Z");
+  const c = item("c", null);
+  const keys = (sort) => [c, a, b].sort(model.compareWorkspaceTimes(sort)).map((w) => w.ref.key);
+  assert.deepEqual(keys("created"), ["b", "a", "c"]);
+  // Last prompt falls back to creation time.
+  assert.deepEqual(keys("lastPrompt"), ["a", "b", "c"]);
+});

@@ -14,7 +14,7 @@ import { useDrag, useDragHandle, useDragSlot } from "./drag";
 import { DecorIcon, useDecorations } from "./decor";
 import { useT } from "./i18n";
 import { useLook, type Look } from "./look";
-import { mostUrgent } from "./model";
+import { compareWorkspaceTimes, mostUrgent } from "./model";
 import { ProjectIcon } from "./project-icon";
 import type { ProjectGroup } from "../shared/settings";
 
@@ -485,7 +485,7 @@ export function StatusDot({ color, running = false }: { color: string; running?:
 /** A workspace that appears under its project row. */
 function isListed(item: PluginWorkspaceSnapshot, look: Look): boolean {
   // Pinned workspaces live in the Pinned section unless the user hid it.
-  return (!look.showPinned || !item.pinnedAt) && !item.background && !item.archivingAt;
+  return (!look.showPinned || !item.pinnedAt) && (look.showBackground || !item.background) && !item.archivingAt;
 }
 
 /**
@@ -626,7 +626,7 @@ export function WorkspaceRow({
   const t = useT();
   const nameColor = useDecorations().get("workspaces", reference.key).color;
   const workspace = useWorkspace(reference, (item) => ({
-    title: item.title ?? item.name,
+    title: (look.workspaceTitle === "branch" ? item.branch : null) ?? item.title ?? item.name,
     indicator: item.indicator,
     indicatorLabel: item.indicatorLabel,
     additions: item.diffStat?.additions ?? 0,
@@ -720,7 +720,10 @@ export function ProjectBlock({
   const project = useProject(reference, (item) => ({ name: item.displayName }));
   const listed = (item: PluginWorkspaceSnapshot) =>
     item.project.key === reference.key && isListed(item, look);
-  const workspaces = useWorkspaces({ where: listed, orderBy: "name" });
+  const workspaces = useWorkspaces({
+    where: listed,
+    orderBy: look.workspaceSort === "name" ? "name" : compareWorkspaceTimes(look.workspaceSort),
+  });
   const rolledUp = (item: PluginWorkspaceSnapshot) =>
     (item.project.key === reference.key || subProjects.includes(item.project.key)) && isListed(item, look);
   const status = useFoldedStatus(collapsed && look.showFoldedStatus ? rolledUp : null);
