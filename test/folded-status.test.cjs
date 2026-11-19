@@ -371,3 +371,10 @@ test("sectionOf finds a sub-project's section through its parent", () => {
   assert.equal(model.sectionOf(layout, "zzz"), undefined);
 });
 
+
+test("project settings path matches the app's route", () => {
+  assert.equal(
+    model.projectSettingsPath({ hostId: "srv_a b", id: "prj/1" }),
+    "/settings/hosts/srv_a%20b/projects/prj%2F1",
+  );
+});

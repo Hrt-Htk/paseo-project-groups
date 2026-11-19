@@ -227,6 +227,7 @@ export function ProjectMenuDialog({
   onChooseParent,
   onUnnest,
   onNewWorkspace,
+  onOpenSettings,
   onDecorate,
   onRemove,
   onClose,
@@ -241,6 +242,8 @@ export function ProjectMenuDialog({
   onChooseParent: (parentKey: string) => void;
   onUnnest: () => void;
   onNewWorkspace: () => void;
+  /** Undefined where the app's project settings page can't be opened. */
+  onOpenSettings?: () => void;
   onDecorate: (name: string) => void;
   onRemove: () => void;
   onClose: () => void;
@@ -291,6 +294,9 @@ export function ProjectMenuDialog({
         />
         <MenuSection title={t("project.actionsSection")} theme={theme}>
           <MenuRow label={t("project.newWorkspaceItem")} icon="Plus" theme={theme} onPress={onNewWorkspace} />
+          {onOpenSettings ? (
+            <MenuRow label={t("project.openSettings")} icon="Settings" theme={theme} onPress={onOpenSettings} />
+          ) : null}
           <MenuRow
             label={t("project.decorateItem")}
             icon="Palette"
