@@ -14,6 +14,11 @@ export function mostUrgent(statuses: Iterable<string>): WorkspaceIndicator {
   return URGENCY[best];
 }
 
+/** The app's route for a project's settings page. */
+export function projectSettingsPath(project: { hostId: string; id: string }): string {
+  return `/settings/hosts/${encodeURIComponent(project.hostId)}/projects/${encodeURIComponent(project.id)}`;
+}
+
 /** What the user is dragging. */
 export type DragSubject =
   { kind: "project"; key: string; label: string } | { kind: "group"; id: string; label: string };
