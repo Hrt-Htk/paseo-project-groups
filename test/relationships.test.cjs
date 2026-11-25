@@ -755,6 +755,29 @@ test("By relation view displays clickable tree rows with full project names, no 
   assert.equal(harness.scrollCalls.length, 0, "clicking a tree row must not call scrollTo");
 });
 
+test("By relation status dots match By project: a workspace's only agent shows the workspace status", (t) => {
+  const data = sampleCrossProjectData();
+  // The agents look idle, but their workspaces carry Paseo's status (unread finish, needs input).
+  const workspaces = data.workspaces.map((item) =>
+    item.id === "ws-rep" ? { ...item, indicator: "attention" } : item.id === "ws-perm" ? { ...item, indicator: "needs_input" } : item);
+  const agents = data.agents.map((item) => ({ ...item, status: "idle", requiresAttention: false }));
+  const harness = makeHarness({
+    projects: data.projects, workspaces, agents, groups: data.groups, activeAgent: null, activeWorkspace: null,
+  });
+  const renderer = harness.mount();
+  t.after(() => harness.unmount());
+  act(() => renderer.root.findByProps({ accessibilityLabel: "按关系", accessibilityRole: "button" }).props.onPress());
+
+  const dotColor = (label) => {
+    const row = renderer.root.findByProps({ accessibilityLabel: label, accessibilityRole: "button" });
+    const dot = row.findAll((node) => node.type === "View" && node.props.style?.width === 6 && node.props.style?.height === 6);
+    return dot[0]?.props.style.backgroundColor;
+  };
+  assert.equal(dotColor("打开MOM报表"), theme.colors.statusSuccess, "unread finish is green, as in By project");
+  assert.equal(dotColor("打开MOM 权限工作台"), theme.colors.statusWarning, "needs input is orange");
+  assert.equal(dotColor("打开MOM CLI"), "transparent");
+});
+
 test("always-visible rail uses deterministic family color, promotes active/hovered family, echoes ChildBadge color, and respects collapsed folds", async (t) => {
   const data = sampleCrossProjectData();
   const railMod = createLoader({ "react-native": { Platform: { OS: "web" }, View: "View" } })("client/relationship-rail.tsx");

@@ -5,6 +5,19 @@ import type { ProjectGroup } from "../shared/settings";
 const URGENCY: readonly WorkspaceIndicator[] = ["needs_input", "failed", "running", "attention", "done"];
 
 /** The most urgent of the given workspace statuses. Unknown values are ignored. */
+/** An agent's status in the workspace terms, as Paseo derives it (`deriveAgentStateBucket`). */
+export function agentIndicator(agent: {
+  status: string;
+  backgroundWork?: { count: number };
+  requiresAttention: boolean;
+  attentionReason: string | null;
+}): WorkspaceIndicator {
+  if (agent.attentionReason === "permission") return "needs_input";
+  if (agent.requiresAttention && agent.attentionReason === "error") return "failed";
+  if (agent.status === "running" || (agent.backgroundWork?.count ?? 0) > 0) return "running";
+  return agent.requiresAttention ? "attention" : "done";
+}
+
 export function mostUrgent(statuses: Iterable<string>): WorkspaceIndicator {
   let best = URGENCY.length - 1;
   for (const status of statuses) {

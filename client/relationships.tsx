@@ -5,6 +5,7 @@ import {
   type PluginSidebarViewProps,
   type WorkspaceRef,
 } from "@getpaseo/plugin/client";
+import type { WorkspaceIndicator } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { useCallback, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -12,7 +13,8 @@ import { useT } from "./i18n";
 import { useLook } from "./look";
 import { relationshipRows, type AgentRelationships } from "./relationship-model";
 import { familyColor, withAlpha } from "./relationship-rail";
-import { StatusDot, WorkspaceRow, useRowStyles } from "./rows";
+import { agentIndicator } from "./model";
+import { StatusDot, WorkspaceRow, indicatorColor, useRowStyles } from "./rows";
 import { sidebarNavProps } from "./web";
 
 export interface RelationshipActions {
@@ -160,8 +162,7 @@ function AgentRowContent({
   agent,
   workspaceRef,
   title: agentTitle,
-  status,
-  requiresAttention,
+  indicator: agentStatus,
   indent,
   sidebar,
   last,
@@ -173,8 +174,7 @@ function AgentRowContent({
   agent: AgentRef;
   workspaceRef: WorkspaceRef;
   title: string | null;
-  status: "initializing" | "idle" | "running" | "error" | "closed";
-  requiresAttention: boolean;
+  indicator: WorkspaceIndicator;
   indent: number;
   sidebar: RelationshipActions;
   last: boolean;
@@ -189,6 +189,7 @@ function AgentRowContent({
     project: item.projectDisplayName,
     additions: item.diffStat?.additions ?? 0,
     deletions: item.diffStat?.deletions ?? 0,
+    indicator: item.indicator,
   }));
   const [hovered, setHovered] = useState(false);
   const { view, model } = sidebar;
@@ -199,14 +200,11 @@ function AgentRowContent({
   const singleRoot = (model.byWorkspace.get(workspaceRef.key)?.length ?? 0) === 1;
   const title = agentTitle ?? workspace?.title ?? agent.id;
   const active = isAgentSelected(sidebar, agent, singleRoot ? workspaceRef : undefined);
+  // A workspace's only agent shows the workspace status, as By project does, which also counts
+  // subagents working in that workspace's tabs.
+  const status = singleRoot && workspace ? workspace.indicator : agentStatus;
   const running = status === "running";
-  const indicator = running
-    ? theme.colors.accent
-    : status === "error"
-      ? theme.colors.statusDanger
-      : requiresAttention
-        ? theme.colors.statusWarning
-        : "transparent";
+  const indicator = indicatorColor(status, theme);
   const showDiff = look.trailing === "diff" && ((workspace?.additions ?? 0) > 0 || (workspace?.deletions ?? 0) > 0);
   const lineColor = sidebar.highlighted.has(agent.key) ? theme.colors.accent : theme.colors.border;
 
@@ -318,8 +316,7 @@ function AgentRow({
   const info = useAgent(agent, (item) => ({
     title: item.title,
     workspace: item.workspace,
-    status: item.status,
-    requiresAttention: item.requiresAttention,
+    indicator: agentIndicator(item),
   }));
   if (!info) return null;
   return (
@@ -327,8 +324,7 @@ function AgentRow({
       agent={agent}
       workspaceRef={info.workspace}
       title={info.title}
-      status={info.status}
-      requiresAttention={info.requiresAttention}
+      indicator={info.indicator}
       indent={indent}
       sidebar={sidebar}
       last={last}

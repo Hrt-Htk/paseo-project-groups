@@ -468,6 +468,11 @@ const INDICATOR_COLOR = {
   attention: "statusSuccess",
 } as const;
 
+/** The status dot color for an indicator; transparent when done. */
+export function indicatorColor(indicator: WorkspaceIndicator, theme: Theme): string {
+  return indicator === "done" ? "transparent" : theme.colors[INDICATOR_COLOR[indicator]];
+}
+
 export function StatusDot({ color, running = false }: { color: string; running?: boolean }) {
   return (
     <View
@@ -644,8 +649,7 @@ export function WorkspaceRow({
   const branch = look.showBranch && workspace.branch && workspace.branch !== workspace.title ? workspace.branch : null;
   const labels = look.showLabels ? workspace.labels : [];
   const active = view.active.workspace?.key === reference.key;
-  const tone = workspace.indicator === "done" ? null : INDICATOR_COLOR[workspace.indicator];
-  const color = tone ? view.theme.colors[tone] : "transparent";
+  const color = indicatorColor(workspace.indicator, view.theme);
   const trailing =
     look.trailing === "diff" && (workspace.additions || workspace.deletions) ? (
       <Text selectable={false} numberOfLines={1} style={styles.detail}>

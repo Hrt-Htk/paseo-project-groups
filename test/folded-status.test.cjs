@@ -52,6 +52,17 @@ test("mostUrgent follows Paseo's order and ignores unknown values", () => {
   assert.equal(model.mostUrgent(["something-new", "attention"]), "attention");
 });
 
+test("agentIndicator derives an agent's status the way Paseo does", () => {
+  const agent = (fields) => ({ status: "idle", backgroundWork: { count: 0 }, requiresAttention: false, attentionReason: null, ...fields });
+  assert.equal(model.agentIndicator(agent({})), "done");
+  assert.equal(model.agentIndicator(agent({ requiresAttention: true, attentionReason: "finished" })), "attention");
+  assert.equal(model.agentIndicator(agent({ status: "running" })), "running");
+  assert.equal(model.agentIndicator(agent({ backgroundWork: { count: 1 } })), "running", "a background shell counts as running");
+  assert.equal(model.agentIndicator(agent({ status: "error", requiresAttention: true, attentionReason: "error" })), "failed");
+  assert.equal(model.agentIndicator(agent({ status: "error" })), "done", "a seen error no longer shows as failed");
+  assert.equal(model.agentIndicator(agent({ status: "running", requiresAttention: true, attentionReason: "permission" })), "needs_input");
+});
+
 test("a later running indicator joins the current rotation and the last one stops it", () => {
   let starts = 0;
   let stops = 0;
