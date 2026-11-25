@@ -468,7 +468,7 @@ function sampleCrossProjectData() {
   };
 }
 
-test("relationship-model orders connected families before standalone agents and tracks multi-level guides", () => {
+test("relationship-model keeps the model order without a comparator and tracks multi-level guides", () => {
   const load = createLoader();
   const model = load("client/relationship-model.ts");
   const solo = ref("agent", "h1", "solo");
@@ -488,12 +488,36 @@ test("relationship-model orders connected families before standalone agents and 
   ]);
 
   const rows = plain(model.relationshipRows(rel));
-  assert.deepEqual(rows.map((r) => r.agent.id), ["root", "c1", "g1", "c2", "solo"]);
-  assert.deepEqual(rows.map((r) => r.depth), [0, 1, 2, 1, 0]);
-  assert.deepEqual(rows.map((r) => r.last), [true, false, true, true, true]);
-  assert.deepEqual(rows[2].guides, [true], "grandchild under non-last child keeps ancestor vertical guide");
+  assert.deepEqual(rows.map((r) => r.agent.id), ["solo", "root", "c1", "g1", "c2"]);
+  assert.deepEqual(rows.map((r) => r.depth), [0, 0, 1, 2, 1]);
+  assert.deepEqual(rows.map((r) => r.last), [true, true, false, true, true]);
+  assert.deepEqual(rows[3].guides, [true], "grandchild under non-last child keeps ancestor vertical guide");
   assert.equal(model.activeFamily(rel, c1.key).parent.key, root.key);
   assert.equal(model.activeFamily(rel, solo.key), null);
+});
+
+test("relationship-model sorts roots and each family's children with the same comparator", () => {
+  const load = createLoader();
+  const model = load("client/relationship-model.ts");
+  const names = { a: "À", b: "B", c: "c", d: "d", e: "e" };
+  const agent = (id) => ref("agent", "h1", id);
+  const [a, b, c, d, e] = ["a", "b", "c", "d", "e"].map(agent);
+
+  // Listed in the reverse order; c and e are subagents of a, in other workspaces.
+  const rel = model.agentRelationships([
+    { key: "w:h1:w-e", items: [e] },
+    { key: "w:h1:w-d", items: [d] },
+    { key: "w:h1:w-c", items: [c] },
+    { key: "w:h1:w-b", items: [b] },
+    { key: "w:h1:w-a", items: [a] },
+    { key: `a:${a.key}`, items: [e, c] },
+  ]);
+  const byName = (left, right) => names[left.id].localeCompare(names[right.id]);
+
+  const rows = plain(model.relationshipRows(rel, byName));
+  assert.deepEqual(rows.map((r) => r.agent.id), ["a", "c", "e", "b", "d"]);
+  assert.deepEqual(rows.map((r) => r.depth), [0, 1, 1, 0, 0]);
+  assert.deepEqual(rows.map((r) => r.last), [true, false, true, true, true]);
 });
 
 test("project view keeps workspace rows as the single entry without duplicate drawers/chips and never scrolls on click", async (t) => {

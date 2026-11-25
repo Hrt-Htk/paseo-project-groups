@@ -119,15 +119,22 @@ export interface RelationshipRow {
   readonly guides: readonly boolean[];
 }
 
-/** Flatten the tree for rendering, putting connected families first and surviving stale links. */
-export function relationshipRows(relationships: AgentRelationships): RelationshipRow[] {
+/**
+ * Flatten the tree for rendering, surviving stale links. `compare` orders the roots and each
+ * family's children alike; without it, the model's order is kept.
+ */
+export function relationshipRows(
+  relationships: AgentRelationships,
+  compare?: (left: AgentRef, right: AgentRef) => number,
+): RelationshipRow[] {
+  const sorted = (agents: readonly AgentRef[]) => (compare ? [...agents].sort(compare) : agents);
   const rows: RelationshipRow[] = [];
   const seen = new Set<string>();
   const visit = (agent: AgentRef, depth: number, last: boolean, guides: readonly boolean[]) => {
     if (seen.has(agent.key)) return;
     seen.add(agent.key);
     rows.push({ agent, depth, last, guides });
-    const children = relationships.children.get(agent.key) ?? [];
+    const children = sorted(relationships.children.get(agent.key) ?? []);
     const nextGuides = depth === 0 ? guides : [...guides, !last];
     children.forEach((child, index) => visit(child, depth + 1, index === children.length - 1, nextGuides));
   };
@@ -135,10 +142,7 @@ export function relationshipRows(relationships: AgentRelationships): Relationshi
   for (const agent of relationships.agents.values()) {
     if (!relationships.parents.has(agent.key)) roots.push(agent);
   }
-  for (const agent of roots) {
-    if ((relationships.children.get(agent.key)?.length ?? 0) > 0) visit(agent, 0, true, []);
-  }
-  for (const agent of roots) visit(agent, 0, true, []);
+  for (const agent of sorted(roots)) visit(agent, 0, true, []);
   // Stale or inconsistent parent links must not hide an agent or recurse forever.
   for (const agent of relationships.agents.values()) visit(agent, 0, true, []);
   return rows;

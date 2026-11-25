@@ -1,15 +1,19 @@
 import {
   useAgent,
+  useAgents,
   useWorkspace,
+  useWorkspaces,
   type AgentRef,
   type PluginSidebarViewProps,
   type WorkspaceRef,
 } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/ui";
-import { useCallback, useState, type ReactNode } from "react";
+import type { PluginAgentSnapshot } from "@getpaseo/plugin";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useT } from "./i18n";
 import { useLook } from "./look";
+import { compareWorkspaceTimes } from "./model";
 import { relationshipRows, type AgentRelationships } from "./relationship-model";
 import { familyColor, withAlpha } from "./relationship-rail";
 import { StatusDot, WorkspaceRow, useRowStyles } from "./rows";
@@ -389,11 +393,39 @@ export function RelationshipWorkspace({
   );
 }
 
+/**
+ * Row order for By relation, from the Sort setting. Name: by the agent's title, untitled agents
+ * last. Created and Last prompt: by the agent's workspace in By project order, newest agent first.
+ */
+function useRelationOrder(model: AgentRelationships): (left: AgentRef, right: AgentRef) => number {
+  const look = useLook();
+  const sort = look.workspaceSort;
+  const workspaces = useWorkspaces({ orderBy: compareWorkspaceTimes(sort === "name" ? "created" : sort) });
+  const agents = useAgents({
+    orderBy: sort === "name" ? compareAgentTitles : ["createdAt", "desc"],
+  });
+  return useMemo(() => {
+    const workspaceRank = new Map(workspaces.map((ref, index) => [ref.key, index]));
+    const agentRank = new Map(agents.map((ref, index) => [ref.key, index]));
+    const rank = (ranks: ReadonlyMap<string, number>, key: string | undefined) =>
+      (key === undefined ? undefined : ranks.get(key)) ?? Number.MAX_SAFE_INTEGER;
+    const byWorkspace = (left: AgentRef, right: AgentRef) =>
+      sort === "name" ? 0 : rank(workspaceRank, model.workspaces.get(left.key)) - rank(workspaceRank, model.workspaces.get(right.key));
+    return (left, right) => byWorkspace(left, right) || rank(agentRank, left.key) - rank(agentRank, right.key);
+  }, [agents, model, sort, workspaces]);
+}
+
+function compareAgentTitles(left: PluginAgentSnapshot, right: PluginAgentSnapshot): number {
+  if (!left.title || !right.title) return Number(!left.title) - Number(!right.title);
+  return left.title.localeCompare(right.title);
+}
+
 export function RelationshipsList({ sidebar }: { sidebar: RelationshipActions }) {
   const { theme, layout } = sidebar.view;
   const styles = useRowStyles(theme);
   const t = useT();
-  const nodes = relationshipRows(sidebar.model);
+  const order = useRelationOrder(sidebar.model);
+  const nodes = relationshipRows(sidebar.model, order);
   if (!nodes.length) return <Text style={[styles.detail, { padding: 12 }]}>{t("relation.empty")}</Text>;
   const base = layout.compact ? 10 : 12;
   const step = layout.compact ? 12 : 14;
