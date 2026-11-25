@@ -4,7 +4,6 @@ import type { ProjectGroup } from "../shared/settings";
 /** Paseo's order for a folded project's status: the first one present wins. */
 const URGENCY: readonly WorkspaceIndicator[] = ["needs_input", "failed", "running", "attention", "done"];
 
-/** The most urgent of the given workspace statuses. Unknown values are ignored. */
 /** An agent's status in the workspace terms, as Paseo derives it (`deriveAgentStateBucket`). */
 export function agentIndicator(agent: {
   status: string;
@@ -18,6 +17,7 @@ export function agentIndicator(agent: {
   return agent.requiresAttention ? "attention" : "done";
 }
 
+/** The most urgent of the given workspace statuses. Unknown values are ignored. */
 export function mostUrgent(statuses: Iterable<string>): WorkspaceIndicator {
   let best = URGENCY.length - 1;
   for (const status of statuses) {
