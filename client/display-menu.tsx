@@ -28,6 +28,8 @@ const SCREEN_EDGE = 8;
 export function DisplayMenuButton({ view }: { view: PluginSidebarViewProps }) {
   const t = useT();
   const look = useLook();
+  // Read here: the compact sheet renders outside the plugin's tree, where context falls back to its default.
+  const { openAppearanceSettings } = useViewActions();
   const triggerRef = useRef<View>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [open, setOpen] = useState(false);
@@ -59,13 +61,13 @@ export function DisplayMenuButton({ view }: { view: PluginSidebarViewProps }) {
       {open && compact ? (
         <Modal title={t("display.heading")} open onOpenChange={(next) => (next ? undefined : close())}>
           <Modal.Content contentContainerStyle={{ padding: 8, gap: 0 }}>
-            <DisplayMenu theme={view.theme} compact onClose={close} />
+            <DisplayMenu theme={view.theme} compact onClose={close} onOpenSettings={openAppearanceSettings} />
           </Modal.Content>
         </Modal>
       ) : null}
       {open && !compact && anchor ? (
         <Dropdown anchor={anchor} theme={view.theme} onClose={close}>
-          <DisplayMenu theme={view.theme} compact={false} onClose={close} />
+          <DisplayMenu theme={view.theme} compact={false} onClose={close} onOpenSettings={openAppearanceSettings} />
         </Dropdown>
       ) : null}
     </>
@@ -122,9 +124,18 @@ function Dropdown({
   );
 }
 
-function DisplayMenu({ theme, compact, onClose }: { theme: Theme; compact: boolean; onClose: () => void }) {
+function DisplayMenu({
+  theme,
+  compact,
+  onClose,
+  onOpenSettings,
+}: {
+  theme: Theme;
+  compact: boolean;
+  onClose: () => void;
+  onOpenSettings: () => void;
+}) {
   const t = useT();
-  const actions = useViewActions();
   const settings = useSettings(appearanceDocument);
   const saver = useSettingsSaver(settings);
   const [page, setPage] = useState<Page>("root");
@@ -142,7 +153,7 @@ function DisplayMenu({ theme, compact, onClose }: { theme: Theme; compact: boole
       label={t("display.settings")}
       onPress={() => {
         onClose();
-        actions.openAppearanceSettings();
+        onOpenSettings();
       }}
     />
   );

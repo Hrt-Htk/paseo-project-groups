@@ -18,7 +18,11 @@ const theme = {
     surface2: "#dddddd",
   },
 };
-const Modal = ({ children }) => React.createElement("Modal", null, children);
+const noActions = { openAppearanceSettings: () => {} };
+const ViewActionsContext = React.createContext(noActions);
+// The app's sheet renders outside the plugin's tree, so context inside it falls back to its default.
+const Modal = ({ children }) =>
+  React.createElement("Modal", null, React.createElement(ViewActionsContext.Provider, { value: noActions }, children));
 Modal.Content = ({ children }) => React.createElement("ModalContent", null, children);
 
 const DEFAULTS = {
@@ -56,7 +60,7 @@ function loadMenu(values) {
     "./i18n": { useT: () => (key) => key },
     "./look": {
       useLook: () => ({ icon: 13 }),
-      useViewActions: () => ({ openAppearanceSettings: () => opened.push("appearance") }),
+      useViewActions: () => React.useContext(ViewActionsContext),
     },
     "./save": {
       useSettingsSaver: () => ({
@@ -92,7 +96,9 @@ async function openMenu({ compact = true, values = {} } = {}) {
   const view = { theme, layout: { compact, platform: "web" } };
   let renderer;
   await act(() => {
-    renderer = create(React.createElement(menu.DisplayMenuButton, { view }), {
+    const actions = { openAppearanceSettings: () => menu.opened.push("appearance") };
+    const button = React.createElement(menu.DisplayMenuButton, { view });
+    renderer = create(React.createElement(ViewActionsContext.Provider, { value: actions }, button), {
       createNodeMock: () => ({ measureInWindow: (callback) => callback(400, 100, 24, 24) }),
     });
   });
@@ -154,13 +160,15 @@ test("picking the trailing choice already showing empties the slot", async (t) =
   assert.equal(saved.at(-1).rowTrailing, "timestamp");
 });
 
-test("Settings… closes the menu and opens the appearance settings", async (t) => {
-  const { renderer, press, opened } = await openMenu();
-  t.after(() => act(() => renderer.unmount()));
-  await press("display.settings");
-  assert.deepEqual(opened, ["appearance"]);
-  assert.equal(isOpen(renderer), false);
-});
+for (const compact of [true, false]) {
+  test(`Settings… closes the ${compact ? "sheet" : "dropdown"} and opens the appearance settings`, async (t) => {
+    const { renderer, press, opened } = await openMenu({ compact });
+    t.after(() => act(() => renderer.unmount()));
+    await press("display.settings");
+    assert.deepEqual(opened, ["appearance"]);
+    assert.equal(isOpen(renderer), false);
+  });
+}
 
 test("compact layouts get a sheet, wide ones a dropdown under the button", async (t) => {
   const compact = await openMenu({ compact: true });
