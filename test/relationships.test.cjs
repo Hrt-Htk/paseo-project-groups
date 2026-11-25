@@ -106,6 +106,7 @@ function makeHarness({
   collapsed = [],
   activeAgent = null,
   activeWorkspace = null,
+  appearance = {},
 } = {}) {
   const workspaceRefCalls = [];
   const openedAgents = [];
@@ -226,7 +227,7 @@ function makeHarness({
       return {
         status: "ready",
         revision: "a1",
-        values: doc.schema.parse({}),
+        values: doc.schema.parse(doc.id === "appearance" ? appearance : {}),
         saving: false,
         saveError: null,
         save: async () => true,
@@ -285,6 +286,7 @@ function makeHarness({
     "@getpaseo/plugin/client/ui": sdkUi,
     "@tanstack/react-query": {
       useQuery: () => ({ data: undefined, isLoading: false, refetch: async () => {} }),
+      useQueryClient: () => ({ invalidateQueries: async () => {} }),
     },
   });
 
@@ -753,6 +755,33 @@ test("By relation view displays clickable tree rows with full project names, no 
   });
   assert.deepEqual(harness.openedAgents, [data.refs.aPerm]);
   assert.equal(harness.scrollCalls.length, 0, "clicking a tree row must not call scrollTo");
+});
+
+test("By relation rows follow Title: Branch and show the branch line and labels like By project", (t) => {
+  const data = sampleCrossProjectData();
+  const workspaces = data.workspaces.map((item) =>
+    item.id === "ws-rep" ? { ...item, labels: ["urgent"] } : item.id === "ws-cli" ? { ...item, branch: null } : item);
+  const mount = (appearance) => {
+    const harness = makeHarness({
+      projects: data.projects, workspaces, agents: data.agents, groups: data.groups, appearance,
+    });
+    const renderer = harness.mount();
+    t.after(() => harness.unmount());
+    act(() => renderer.root.findByProps({ accessibilityLabel: "按关系", accessibilityRole: "button" }).props.onPress());
+    return textOf(renderer.toJSON());
+  };
+
+  const branchTitles = mount({ workspaceTitle: "branch" });
+  assert.ok(branchTitles.includes("feat/reports") && branchTitles.includes("feat/perm"), "single-agent rows show the branch");
+  assert.ok(!branchTitles.includes("MOM报表"), "the branch replaces the agent title");
+  assert.ok(branchTitles.includes("MOM CLI"), "no branch: the title stays");
+
+  const meta = mount({ workspaceTitle: "title", showBranch: true, showLabels: true });
+  assert.ok(meta.includes("MOM报表") && meta.includes("feat/reports"), "branch line under the title");
+  assert.ok(meta.includes("urgent"), "labels under the title");
+
+  const plain = mount({ workspaceTitle: "title", showBranch: false, showLabels: false });
+  assert.ok(!plain.includes("feat/reports") && !plain.includes("urgent"), "hidden when both are off");
 });
 
 test("always-visible rail uses deterministic family color, promotes active/hovered family, echoes ChildBadge color, and respects collapsed folds", async (t) => {

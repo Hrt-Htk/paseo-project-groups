@@ -12,7 +12,7 @@ import { useT } from "./i18n";
 import { useLook } from "./look";
 import { relationshipRows, type AgentRelationships } from "./relationship-model";
 import { familyColor, withAlpha } from "./relationship-rail";
-import { StatusDot, WorkspaceRow, useRowStyles } from "./rows";
+import { MetaLine, StatusDot, WorkspaceRow, useRowStyles } from "./rows";
 import { sidebarNavProps } from "./web";
 
 export interface RelationshipActions {
@@ -189,6 +189,8 @@ function AgentRowContent({
     project: item.projectDisplayName,
     additions: item.diffStat?.additions ?? 0,
     deletions: item.diffStat?.deletions ?? 0,
+    branch: item.branch,
+    labels: item.labels,
   }));
   const [hovered, setHovered] = useState(false);
   const { view, model } = sidebar;
@@ -197,7 +199,12 @@ function AgentRowContent({
   const styles = useRowStyles(theme);
 
   const singleRoot = (model.byWorkspace.get(workspaceRef.key)?.length ?? 0) === 1;
-  const title = agentTitle ?? workspace?.title ?? agent.id;
+  // A workspace's only agent is titled like its By project row when Title is Branch.
+  const branchTitle = singleRoot && look.workspaceTitle === "branch" ? workspace?.branch : null;
+  const title = branchTitle ?? agentTitle ?? workspace?.title ?? agent.id;
+  // The meta line under the name, by By project's rules.
+  const branch = look.showBranch && workspace?.branch && workspace.branch !== title ? workspace.branch : null;
+  const labels = look.showLabels && workspace ? workspace.labels : [];
   const active = isAgentSelected(sidebar, agent, singleRoot ? workspaceRef : undefined);
   const running = status === "running";
   const indicator = running
@@ -288,6 +295,9 @@ function AgentRowContent({
                   {workspace.project}
                 </Text>
               </View>
+            ) : null}
+            {branch || labels.length ? (
+              <MetaLine hostId={workspaceRef.hostId} branch={branch} labels={labels} theme={theme} />
             ) : null}
           </View>
         </Pressable>
